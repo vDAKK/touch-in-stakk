@@ -182,6 +182,16 @@ button { font-family: inherit; }
 }
 .tab.turn { animation: turn-pulse 0.9s ease-in-out infinite; }
 .tab.turn .tab-dot { background: var(--gold) !important; box-shadow: 0 0 8px var(--gold); }
+.tab.dragging { opacity: 0.5; }
+.tab.alert::after {
+  content: "";
+  position: absolute;
+  top: 5px; right: 24px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
+}
 
 .bar-btn {
   -webkit-app-region: no-drag;

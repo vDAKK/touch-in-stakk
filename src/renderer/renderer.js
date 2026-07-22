@@ -16,13 +16,59 @@ $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
 $('follow-toggle').onclick = toggleFollow;
 
-// Grouped action: F2 readies every account currently in a fight.
+// Launcher hotkeys while the chrome (not a game webview) has focus. When a game
+// webview has focus its preload forwards the same shortcuts over the 'hotkey'
+// channel, so both focus states behave identically.
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'F2') {
+  if (e.key === 'F2' && !e.ctrlKey) {
     e.preventDefault();
-    broadcastToAll({ type: 'ready', value: true });
+    handleHotkey({ name: 'ready-all' });
+  } else if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+    const i = Number(e.key) - 1;
+    if (accounts[i]) {
+      e.preventDefault();
+      handleHotkey({ name: 'switch', index: i });
+    }
+  } else if (e.ctrlKey && e.key === 'Tab') {
+    e.preventDefault();
+    handleHotkey({ name: 'cycle', dir: e.shiftKey ? -1 : 1 });
   }
 });
+
+function handleHotkey(hk) {
+  if (!hk) return;
+  if (hk.name === 'ready-all') broadcastToAll({ type: 'ready', value: true });
+  else if (hk.name === 'switch') { if (accounts[hk.index]) setActive(accounts[hk.index].id); }
+  else if (hk.name === 'cycle') cycleTab(hk.dir);
+}
+
+function cycleTab(dir) {
+  if (!accounts.length) return;
+  let i = accounts.findIndex((a) => a.id === activeId);
+  if (i < 0) i = 0;
+  i = (i + dir + accounts.length) % accounts.length;
+  setActive(accounts[i].id);
+}
+
+// Attention badge (set by QoL events, cleared when the tab is viewed).
+const alerted = new Set();
+function setAlert(id, on) {
+  if (on) alerted.add(id);
+  else alerted.delete(id);
+  const tab = document.getElementById(tabId(id));
+  if (tab) tab.classList.toggle('alert', on);
+}
+
+async function reorder(draggedId, targetId) {
+  if (draggedId === targetId) return;
+  const from = accounts.findIndex((a) => a.id === draggedId);
+  const to = accounts.findIndex((a) => a.id === targetId);
+  if (from < 0 || to < 0) return;
+  const [moved] = accounts.splice(from, 1);
+  accounts.splice(to, 0, moved);
+  await window.touch.accountsReorder(accounts.map((a) => a.id));
+  renderTabs();
+}
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => ($('settings-modal').hidden = true);
 $('save-settings').onclick = saveSettings;
@@ -68,8 +114,8 @@ async function createView(account) {
     if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
   });
   wv.addEventListener('ipc-message', (e) => {
-    if (e.channel !== 'qol') return;
-    handleQol(account.id, e.args[0]);
+    if (e.channel === 'qol') handleQol(account.id, e.args[0]);
+    else if (e.channel === 'hotkey') handleHotkey(e.args[0]);
   });
   $('views').appendChild(wv);
 }
@@ -84,8 +130,19 @@ function renderTabs() {
   box.innerHTML = '';
   for (const a of accounts) {
     const tab = document.createElement('div');
-    tab.className = 'tab' + (a.id === activeId ? ' active' : '');
+    tab.className = 'tab' + (a.id === activeId ? ' active' : '') + (alerted.has(a.id) ? ' alert' : '');
     tab.id = tabId(a.id);
+    tab.draggable = true;
+    tab.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', String(a.id));
+      tab.classList.add('dragging');
+    });
+    tab.addEventListener('dragend', () => tab.classList.remove('dragging'));
+    tab.addEventListener('dragover', (e) => e.preventDefault());
+    tab.addEventListener('drop', (e) => {
+      e.preventDefault();
+      reorder(Number(e.dataTransfer.getData('text/plain')), a.id);
+    });
 
     const dot = document.createElement('span');
     dot.className = 'tab-dot';
@@ -112,6 +169,7 @@ function renderTabs() {
 
 function setActive(id) {
   activeId = id;
+  alerted.delete(id);
   showEmpty(false);
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
@@ -126,6 +184,7 @@ function handleQol(accountId, msg) {
     identities[accountId] = { name: msg.name, id: msg.id };
   } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
+    else if (activeId !== accountId) setAlert(accountId, true);
     pulseTab(accountId);
   }
 }

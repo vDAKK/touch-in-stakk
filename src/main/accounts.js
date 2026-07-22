@@ -52,8 +52,24 @@ function removeAccount(userDataDir, id) {
   return true;
 }
 
+function reorderAccounts(userDataDir, orderedIds) {
+  const state = loadAccounts(userDataDir);
+  const byId = new Map(state.accounts.map((a) => [a.id, a]));
+  const reordered = [];
+  for (const id of orderedIds) {
+    if (byId.has(id)) {
+      reordered.push(byId.get(id));
+      byId.delete(id);
+    }
+  }
+  for (const a of byId.values()) reordered.push(a); // keep any id not in the list
+  state.accounts = reordered;
+  saveAccounts(userDataDir, state);
+  return state.accounts;
+}
+
 function partitionFor(id) {
   return 'persist:acct-' + id;
 }
 
-module.exports = { loadAccounts, saveAccounts, addAccount, renameAccount, removeAccount, partitionFor, accountsPath, DEFAULT };
+module.exports = { loadAccounts, saveAccounts, addAccount, renameAccount, removeAccount, reorderAccounts, partitionFor, accountsPath, DEFAULT };

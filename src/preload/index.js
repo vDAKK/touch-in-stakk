@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('touch', {
   accountsAdd: (name) => ipcRenderer.invoke('accounts:add', name),
   accountsRename: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),
   accountsRemove: (id) => ipcRenderer.invoke('accounts:remove', id),
+  accountsReorder: (ids) => ipcRenderer.invoke('accounts:reorder', ids),
   prepareSession: (partition) => ipcRenderer.invoke('session:prepare', partition),
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),

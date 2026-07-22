@@ -6,7 +6,7 @@ const { loadSettings, saveSettings } = require('./settings');
 const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
 const { startProxy } = require('./proxy');
 const { prepareSession } = require('./session-prep');
-const { loadAccounts, addAccount, renameAccount, removeAccount } = require('./accounts');
+const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
 
 // Fixed so the game's origin (http://127.0.0.1:<port>) is stable across
 // launches and the saved session (cookies/localStorage) is found on relaunch.
@@ -182,6 +182,7 @@ ipcMain.handle('accounts:list', () => loadAccounts(userDataDir()));
 ipcMain.handle('accounts:add', (_e, name) => addAccount(userDataDir(), name));
 ipcMain.handle('accounts:rename', (_e, id, name) => renameAccount(userDataDir(), id, name));
 ipcMain.handle('accounts:remove', (_e, id) => removeAccount(userDataDir(), id));
+ipcMain.handle('accounts:reorder', (_e, ids) => reorderAccounts(userDataDir(), ids));
 ipcMain.handle('session:prepare', (_e, partition) => {
   prepareSession(session.fromPartition(partition), logToFile);
   return true;

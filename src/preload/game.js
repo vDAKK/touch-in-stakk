@@ -124,6 +124,23 @@ ipcRenderer.on('qol', (_e, payload) => {
   window.postMessage({ __qol: 'cmd', payload }, '*');
 });
 
+// Reserved launcher hotkeys. This preload sees keydown even while the game has
+// focus, so forward our shortcuts to the host and stop the game from also acting.
+window.addEventListener(
+  'keydown',
+  (e) => {
+    let hk = null;
+    if (e.key === 'F2' && !e.ctrlKey && !e.altKey) hk = { name: 'ready-all' };
+    else if (e.ctrlKey && e.key >= '1' && e.key <= '9') hk = { name: 'switch', index: Number(e.key) - 1 };
+    else if (e.ctrlKey && e.key === 'Tab') hk = { name: 'cycle', dir: e.shiftKey ? -1 : 1 };
+    if (!hk) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.sendToHost('hotkey', hk);
+  },
+  true
+);
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', injectHook);
 } else {
