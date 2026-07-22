@@ -37,10 +37,26 @@ function rulesForPath(regexMap, gamePath) {
   return [];
 }
 
+// Rules of our own, appended after the lindo rules. The lindo android rule
+// rewrites the identity's buildVersion to the frozen window._ copy, but the
+// game hardcodes the correct value in window.buildVersion at load. Reading that
+// live value keeps the identity in step with the current build, so the server
+// no longer rejects the connection as outdated ("nouvelle version disponible").
+const EXTRA_RULES = {
+  'build/script.js': [['window\\._\\["buildVersion"\\]', 'window.buildVersion']],
+};
+
+function mergeExtraRules(regexMap) {
+  for (const [key, extra] of Object.entries(EXTRA_RULES)) {
+    regexMap[key] = (regexMap[key] || []).concat(extra);
+  }
+  return regexMap;
+}
+
 async function fetchPatchSet(http = axios, manifestUrl = MANIFEST_URL) {
   const manifest = (await http.get(manifestUrl)).data;
   const regexUrl = manifest.files['regex.json'].filename;
-  const regexMap = (await http.get(regexUrl)).data;
+  const regexMap = mergeExtraRules((await http.get(regexUrl)).data);
   return { manifest, regexMap };
 }
 

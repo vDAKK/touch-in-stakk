@@ -58,6 +58,17 @@ test('rulesForPath does not match on a filename collision', () => {
   assert.deepStrictEqual(rulesForPath(map, 'foo/notscript.js'), []);
 });
 
+test('fetchPatchSet appends the buildVersion override rule', async () => {
+  const manifest = { files: { 'regex.json': { filename: 'http://x/regex.json', version: '1' } } };
+  const regexMap = { 'build/script.js': [['a', 'b']] };
+  const http = {
+    get: async (url) => (url.endsWith('manifest.json') ? { data: manifest } : { data: regexMap }),
+  };
+  const out = await fetchPatchSet(http, 'http://x/manifest.json');
+  const last = out.regexMap['build/script.js'].slice(-1)[0];
+  assert.deepStrictEqual(last, ['window\\._\\["buildVersion"\\]', 'window.buildVersion']);
+});
+
 test('fetchPatchSet resolves regex.json via manifest (mocked http)', async () => {
   const manifest = { files: { 'regex.json': { filename: 'http://x/regex.json', version: '1' } } };
   const regexMap = { 'build/script.js': [['a', 'b']] };
