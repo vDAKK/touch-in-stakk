@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, webContents } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -183,6 +183,18 @@ ipcMain.handle('accounts:add', (_e, name) => addAccount(userDataDir(), name));
 ipcMain.handle('accounts:rename', (_e, id, name) => renameAccount(userDataDir(), id, name));
 ipcMain.handle('accounts:remove', (_e, id) => removeAccount(userDataDir(), id));
 ipcMain.handle('accounts:reorder', (_e, ids) => reorderAccounts(userDataDir(), ids));
+// Inject a real key event into each target account's game webview (multibox
+// broadcast). sendInputEvent produces trusted input the game acts on.
+ipcMain.handle('broadcast:key', (_e, wcIds, key) => {
+  for (const id of wcIds) {
+    const wc = webContents.fromId(id);
+    if (!wc || wc.isDestroyed()) continue;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: key });
+    if (typeof key === 'string' && key.length === 1) wc.sendInputEvent({ type: 'char', keyCode: key });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: key });
+  }
+  return true;
+});
 ipcMain.handle('session:prepare', (_e, partition) => {
   prepareSession(session.fromPartition(partition), logToFile);
   return true;

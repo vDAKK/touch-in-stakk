@@ -15,6 +15,7 @@ $('add-tab').onclick = addAccount;
 $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
 $('follow-toggle').onclick = toggleFollow;
+$('broadcast-toggle').onclick = toggleBroadcast;
 
 // Launcher hotkeys while the chrome (not a game webview) has focus. When a game
 // webview has focus its preload forwards the same shortcuts over the 'hotkey'
@@ -116,6 +117,7 @@ async function createView(account) {
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
     else if (e.channel === 'hotkey') handleHotkey(e.args[0]);
+    else if (e.channel === 'bcast-key') handleBcastKey(account.id, e.args[0]);
   });
   $('views').appendChild(wv);
 }
@@ -175,6 +177,7 @@ function setActive(id) {
     const wv = document.getElementById(viewId(a.id));
     if (wv) wv.classList.toggle('inactive', a.id !== id);
   }
+  if (broadcasting) updateBroadcastSource();
   renderTabs();
 }
 
@@ -255,6 +258,33 @@ function broadcastToAll(payload) {
 
 // Toggle the game's native party-follow: every other account follows the active
 // account (the leader). Requires the accounts to already share a party.
+// Broadcast: mirror the active account's key presses onto the other accounts.
+let broadcasting = false;
+function toggleBroadcast() {
+  broadcasting = !broadcasting;
+  $('broadcast-toggle').classList.toggle('on', broadcasting);
+  updateBroadcastSource();
+}
+
+function updateBroadcastSource() {
+  for (const a of accounts) {
+    const wv = document.getElementById(viewId(a.id));
+    if (wv) wv.send('bcast-mode', broadcasting && a.id === activeId);
+  }
+}
+
+function handleBcastKey(sourceId, data) {
+  if (!broadcasting || sourceId !== activeId || !data || !data.key) return;
+  const targets = accounts
+    .filter((a) => a.id !== sourceId)
+    .map((a) => {
+      const wv = document.getElementById(viewId(a.id));
+      return wv ? wv.getWebContentsId() : null;
+    })
+    .filter(Boolean);
+  if (targets.length) window.touch.broadcastKey(targets, data.key);
+}
+
 let following = false;
 function toggleFollow() {
   const leader = accounts.find((a) => a.id === activeId);

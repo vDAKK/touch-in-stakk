@@ -139,6 +139,17 @@ ipcRenderer.on('qol', (_e, payload) => {
   window.postMessage({ __qol: 'cmd', payload }, '*');
 });
 
+// Whether this webview is the active broadcast source (set by the host).
+let bcastSource = false;
+ipcRenderer.on('bcast-mode', (_e, on) => {
+  bcastSource = !!on;
+});
+
+function isTyping() {
+  const el = document.activeElement;
+  return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+}
+
 // Reserved launcher hotkeys. This preload sees keydown even while the game has
 // focus, so forward our shortcuts to the host and stop the game from also acting.
 window.addEventListener(
@@ -148,10 +159,17 @@ window.addEventListener(
     if (e.key === 'F2' && !e.ctrlKey && !e.altKey) hk = { name: 'ready-all' };
     else if (e.ctrlKey && e.key >= '1' && e.key <= '9') hk = { name: 'switch', index: Number(e.key) - 1 };
     else if (e.ctrlKey && e.key === 'Tab') hk = { name: 'cycle', dir: e.shiftKey ? -1 : 1 };
-    if (!hk) return;
-    e.preventDefault();
-    e.stopPropagation();
-    ipcRenderer.sendToHost('hotkey', hk);
+    if (hk) {
+      e.preventDefault();
+      e.stopPropagation();
+      ipcRenderer.sendToHost('hotkey', hk);
+      return;
+    }
+    // Broadcast plain key presses from the active account to the others. The
+    // source account still acts on the key itself; only the mirror is added.
+    if (bcastSource && !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping()) {
+      ipcRenderer.sendToHost('bcast-key', { key: e.key });
+    }
   },
   true
 );
