@@ -69,6 +69,19 @@ test('sends an Android User-Agent to the origin', async () => {
   }
 });
 
+test('startProxy honors a specified port (stable origin)', async () => {
+  const first = await startProxy({});
+  const port = first.port;
+  first.close();
+  await new Promise((r) => setTimeout(r, 50));
+  const second = await startProxy({ port });
+  try {
+    assert.strictEqual(second.port, port);
+  } finally {
+    second.close();
+  }
+});
+
 test('injectShell adds version globals before head and boot call before /html', () => {
   const out = injectShell('<html><head></head><body></body></html>', { appVersion: '1.2', buildVersion: '3.4' });
   assert.ok(out.includes('window.appVersion="1.2"'));

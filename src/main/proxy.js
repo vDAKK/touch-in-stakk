@@ -117,13 +117,29 @@ function createProxyApp({
   return app;
 }
 
-function startProxy(options) {
+// A stable port matters: the game's storage (cookies, localStorage, IndexedDB)
+// is keyed by origin `http://127.0.0.1:<port>`. A random port each launch would
+// give a new origin and lose the saved session, so callers pass a fixed port;
+// on collision we walk upward a few times rather than fall back to a random one.
+function startProxy(options = {}) {
   const app = createProxyApp(options);
-  return new Promise((resolve) => {
-    const server = app.listen(0, '127.0.0.1', () => {
-      const { port } = server.address();
-      resolve({ port, server, close: () => server.close() });
-    });
+  const preferred = options.port || 0;
+  return new Promise((resolve, reject) => {
+    let attempt = 0;
+    const tryListen = (p) => {
+      const server = app.listen(p, '127.0.0.1', () => {
+        resolve({ port: server.address().port, server, close: () => server.close() });
+      });
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE' && preferred !== 0 && attempt < 10) {
+          attempt += 1;
+          tryListen(preferred + attempt);
+        } else {
+          reject(err);
+        }
+      });
+    };
+    tryListen(preferred);
   });
 }
 

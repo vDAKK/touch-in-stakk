@@ -43,7 +43,7 @@ async function createView(account) {
   wv.setAttribute('partition', partition);
   wv.setAttribute('allowpopups', '');
   wv.setAttribute('src', gameUrl);
-  wv.hidden = true;
+  wv.classList.add('inactive');
   wv.addEventListener('dom-ready', async () => {
     const s = await window.touch.getSettings();
     if (wv.setAudioMuted) wv.setAudioMuted(s.muted);
@@ -88,7 +88,7 @@ function setActive(id) {
   showEmpty(false);
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
-    if (wv) wv.hidden = a.id !== id;
+    if (wv) wv.classList.toggle('inactive', a.id !== id);
   }
   renderTabs();
 }

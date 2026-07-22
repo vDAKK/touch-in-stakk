@@ -7,6 +7,10 @@ const { startProxy } = require('./proxy');
 const { prepareSession } = require('./session-prep');
 const { loadAccounts, addAccount, renameAccount, removeAccount } = require('./accounts');
 
+// Fixed so the game's origin (http://127.0.0.1:<port>) is stable across
+// launches and the saved session (cookies/localStorage) is found on relaunch.
+const GAME_PROXY_PORT = 28590;
+
 let mainWindow = null;
 let proxy = null;
 let patchOk = false;
@@ -56,7 +60,7 @@ async function startOrRestartProxy() {
   const appVersion = await fetchAppVersion().catch(() => FALLBACK_APP_VERSION);
   const versions = { appVersion, buildVersion: appVersion };
   if (proxy) proxy.close();
-  proxy = await startProxy({ regexMap, lindoFiles, versions });
+  proxy = await startProxy({ regexMap, lindoFiles, versions, port: GAME_PROXY_PORT });
   return patchOk;
 }
 
