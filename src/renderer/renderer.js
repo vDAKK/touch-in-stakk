@@ -7,6 +7,21 @@ let accounts = [];
 let activeId = null;
 const identities = {}; // accountId -> { name, id } reported by each game hook
 
+// Remappable in-game actions. gameKey is the native Dofus Touch key the action
+// sends; the user can bind a different trigger key to it (active account only).
+const KEYBIND_ACTIONS = [
+  { id: 'inventory', label: 'Inventaire', gameKey: 'i' },
+  { id: 'spellMenu', label: 'Menu des sorts', gameKey: 's' },
+  { id: 'map', label: 'Carte', gameKey: 'm' },
+  { id: 'character', label: 'Personnage', gameKey: 'c' },
+  { id: 'spell1', label: 'Sort 1', gameKey: '1' },
+  { id: 'spell2', label: 'Sort 2', gameKey: '2' },
+  { id: 'spell3', label: 'Sort 3', gameKey: '3' },
+  { id: 'spell4', label: 'Sort 4', gameKey: '4' },
+  { id: 'spell5', label: 'Sort 5', gameKey: '5' },
+  { id: 'spell6', label: 'Sort 6', gameKey: '6' },
+];
+
 $('min').onclick = () => window.touch.windowMinimize();
 $('max').onclick = () => window.touch.windowToggleMaximize();
 $('close').onclick = () => window.touch.windowClose();
@@ -113,11 +128,13 @@ async function createView(account) {
   wv.classList.add('inactive');
   wv.addEventListener('dom-ready', () => {
     if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
+    wv.send('keybinds', computeRemapMap());
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
     else if (e.channel === 'hotkey') handleHotkey(e.args[0]);
     else if (e.channel === 'bcast-key') handleBcastKey(account.id, e.args[0]);
+    else if (e.channel === 'remap') handleRemap(account.id, e.args[0]);
   });
   $('views').appendChild(wv);
 }
@@ -273,6 +290,78 @@ function updateBroadcastSource() {
   }
 }
 
+function handleRemap(accountId, data) {
+  if (!data || !data.gameKey) return;
+  const wv = document.getElementById(viewId(accountId));
+  if (wv) window.touch.broadcastKey([wv.getWebContentsId()], data.gameKey);
+}
+
+// triggerKey -> gameKey, only for actions the user rebound to a different key.
+function computeRemapMap() {
+  const binds = (settings && settings.keybinds) || {};
+  const map = {};
+  for (const a of KEYBIND_ACTIONS) {
+    const trigger = binds[a.id] || a.gameKey;
+    if (trigger && trigger !== a.gameKey) map[trigger] = a.gameKey;
+  }
+  return map;
+}
+
+function pushKeybinds() {
+  const map = computeRemapMap();
+  for (const a of accounts) {
+    const wv = document.getElementById(viewId(a.id));
+    if (wv) wv.send('keybinds', map);
+  }
+}
+
+// --- Keybind editor (settings modal) ---
+let editingKeybinds = {};
+let capturingAction = null;
+
+function renderKeybinds() {
+  const box = $('keybinds');
+  box.innerHTML = '';
+  for (const a of KEYBIND_ACTIONS) {
+    const row = document.createElement('div');
+    row.className = 'kb-row';
+    const label = document.createElement('span');
+    label.className = 'kb-label';
+    label.textContent = a.label;
+    const key = document.createElement('button');
+    key.type = 'button';
+    key.className = 'kb-key' + (capturingAction === a.id ? ' capturing' : '');
+    key.textContent = capturingAction === a.id ? '…' : keyLabel(editingKeybinds[a.id] || a.gameKey);
+    key.onclick = () => startCapture(a.id);
+    row.append(label, key);
+    box.appendChild(row);
+  }
+}
+
+function keyLabel(k) {
+  if (k === ' ') return 'Espace';
+  return k.length === 1 ? k.toUpperCase() : k;
+}
+
+function startCapture(actionId) {
+  capturingAction = actionId;
+  renderKeybinds();
+}
+
+// Capture phase so it runs before the launcher hotkey handler.
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (!capturingAction) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key !== 'Escape') editingKeybinds[capturingAction] = e.key;
+    capturingAction = null;
+    renderKeybinds();
+  },
+  true
+);
+
 function handleBcastKey(sourceId, data) {
   if (!broadcasting || sourceId !== activeId || !data || !data.key) return;
   const targets = accounts
@@ -364,6 +453,9 @@ async function openSettings() {
   $('muted').checked = s.muted;
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
+  editingKeybinds = { ...(s.keybinds || {}) };
+  capturingAction = null;
+  renderKeybinds();
   $('settings-modal').hidden = false;
 }
 
@@ -374,11 +466,13 @@ async function saveSettings() {
     muted,
     switchOnTurn: $('switch-on-turn').checked,
     notifications: $('notifications').checked,
+    keybinds: editingKeybinds,
   });
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
     if (wv && wv.setAudioMuted) wv.setAudioMuted(muted);
   }
+  pushKeybinds();
   $('settings-modal').hidden = true;
 }
 

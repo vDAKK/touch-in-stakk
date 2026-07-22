@@ -153,6 +153,12 @@ ipcRenderer.on('bcast-mode', (_e, on) => {
   bcastSource = !!on;
 });
 
+// User key remaps for this account: triggerKey -> gameKey to send instead.
+let remapMap = {};
+ipcRenderer.on('keybinds', (_e, map) => {
+  remapMap = map || {};
+});
+
 function isTyping() {
   const el = document.activeElement;
   return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
@@ -173,9 +179,17 @@ window.addEventListener(
       ipcRenderer.sendToHost('hotkey', hk);
       return;
     }
+    const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
+    // Remap a configured trigger key to another game key on this account.
+    if (plain && remapMap[e.key]) {
+      e.preventDefault();
+      e.stopPropagation();
+      ipcRenderer.sendToHost('remap', { gameKey: remapMap[e.key] });
+      return;
+    }
     // Broadcast plain key presses from the active account to the others. The
     // source account still acts on the key itself; only the mirror is added.
-    if (bcastSource && !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping()) {
+    if (bcastSource && plain) {
       ipcRenderer.sendToHost('bcast-key', { key: e.key });
     }
   },

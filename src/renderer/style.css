@@ -336,6 +336,25 @@ button { font-family: inherit; }
 .switch:checked { background: var(--accent-soft); border-color: var(--accent); }
 .switch:checked::after { transform: translateX(17px); background: var(--accent); }
 
+.keybind-head { padding-bottom: 6px; }
+.field-hint { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+.keybinds { display: grid; gap: 6px; max-height: 176px; overflow-y: auto; padding: 2px 4px 2px 0; }
+.kb-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kb-label { color: var(--text-dim); font-size: 13px; }
+.kb-key {
+  min-width: 60px;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.kb-key:hover { border-color: var(--text-dim); }
+.kb-key.capturing { border-color: var(--accent); color: var(--accent); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
 
 /* ---------- Focus + motion ---------- */
