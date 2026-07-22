@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const { loadSettings, saveSettings } = require('./settings');
 const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
 const { startProxy } = require('./proxy');
-const { installSpoofing } = require('./spoof');
+const { prepareSession } = require('./session-prep');
+const { loadAccounts, addAccount, renameAccount, removeAccount } = require('./accounts');
 
 let mainWindow = null;
 let proxy = null;
@@ -57,16 +58,6 @@ async function startOrRestartProxy() {
   if (proxy) proxy.close();
   proxy = await startProxy({ regexMap, lindoFiles, versions });
   return patchOk;
-}
-
-// The lindo base loads a lindo-branded promo popup from lindo-app.com. It is
-// not part of this launcher, and the host resets the TLS connection (noisy SSL
-// errors), so block it outright.
-function blockThirdParty() {
-  session.defaultSession.webRequest.onBeforeRequest(
-    { urls: ['*://lindo-app.com/*', '*://*.lindo-app.com/*'] },
-    (_details, callback) => callback({ cancel: true })
-  );
 }
 
 // --- Auth callback capture ---------------------------------------------------
@@ -139,20 +130,13 @@ function installGameWebviewHandlers() {
   });
 }
 
-function installDiagnostics() {
-  session.defaultSession.webRequest.onErrorOccurred((details) => {
-    if (details.error && details.error !== 'net::ERR_ABORTED') {
-      logToFile('req-error ' + details.error + ' ' + details.url);
-    }
-  });
-}
-
 async function boot() {
   logToFile('=== boot start ===');
-  installSpoofing(session.defaultSession);
-  blockThirdParty();
+  // Spoofing/blocking/logging is installed per session so every account
+  // partition is covered, not just the default session.
+  app.on('session-created', (sess) => prepareSession(sess, logToFile));
+  prepareSession(session.defaultSession, logToFile);
   installGameWebviewHandlers();
-  installDiagnostics();
   await startOrRestartProxy();
   logToFile('boot: patchOk=' + patchOk + ' proxyPort=' + (proxy && proxy.port));
 
@@ -188,6 +172,14 @@ ipcMain.handle('game:url', () => `http://127.0.0.1:${proxy.port}/game/index.html
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('patch:status', () => patchOk);
 ipcMain.handle('patch:retry', () => startOrRestartProxy());
+ipcMain.handle('accounts:list', () => loadAccounts(userDataDir()));
+ipcMain.handle('accounts:add', (_e, name) => addAccount(userDataDir(), name));
+ipcMain.handle('accounts:rename', (_e, id, name) => renameAccount(userDataDir(), id, name));
+ipcMain.handle('accounts:remove', (_e, id) => removeAccount(userDataDir(), id));
+ipcMain.handle('session:prepare', (_e, partition) => {
+  prepareSession(session.fromPartition(partition), logToFile);
+  return true;
+});
 ipcMain.on('window:minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('window:toggle-maximize', () => {
   if (!mainWindow) return;

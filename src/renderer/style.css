@@ -1,18 +1,36 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
-/* Author display rules override the UA [hidden] style, so restore it explicitly. */
 [hidden] { display: none !important; }
 body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #14161c; color: #e6e8ef; font-family: system-ui, sans-serif; }
 .titlebar { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: #0e1015; -webkit-app-region: drag; }
 .win-controls button { -webkit-app-region: no-drag; background: transparent; color: #e6e8ef; border: 0; width: 36px; height: 40px; cursor: pointer; }
 .win-controls button:hover { background: #23262f; }
 #close:hover { background: #b02525; }
-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
-h1 { margin: 0; font-weight: 600; }
-#play { padding: 12px 40px; font-size: 18px; border: 0; border-radius: 8px; background: #3a6df0; color: #fff; cursor: pointer; }
-#play:hover { background: #4d7df6; }
-#patch-warn { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #3a2a12; border: 1px solid #7a5a1a; border-radius: 8px; color: #f0d9a8; font-size: 14px; }
-#patch-warn button { background: #7a5a1a; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-.settings { display: grid; gap: 8px; padding: 16px; background: #1b1e27; border-radius: 8px; }
-.settings input[type="number"] { width: 90px; }
-#game { flex: 1; width: 100%; border: 0; }
+
+#patch-warn { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #3a2a12; border-bottom: 1px solid #7a5a1a; color: #f0d9a8; font-size: 13px; }
+#patch-warn button { background: #7a5a1a; color: #fff; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+
+#tabbar { display: flex; align-items: stretch; gap: 4px; padding: 4px 6px; background: #0e1015; -webkit-app-region: drag; }
+#tabs { display: flex; gap: 4px; }
+.tab { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 12px; height: 34px; background: #1b1e27; border-radius: 6px 6px 0 0; cursor: pointer; max-width: 200px; }
+.tab.active { background: #2a2f3d; }
+.tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-input { width: 120px; background: #0e1015; color: #e6e8ef; border: 1px solid #3a6df0; border-radius: 4px; }
+.tab-close { background: transparent; color: #9aa0ad; border: 0; cursor: pointer; font-size: 12px; }
+.tab-close:hover { color: #fff; }
+#add-tab, #open-settings { -webkit-app-region: no-drag; background: #1b1e27; color: #e6e8ef; border: 0; border-radius: 6px; width: 34px; height: 34px; cursor: pointer; }
+#add-tab:hover, #open-settings:hover { background: #2a2f3d; }
+#open-settings { margin-left: auto; }
+
+#views { flex: 1; position: relative; }
+.game { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+#empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+#empty button, .modal-actions button { padding: 10px 24px; border: 0; border-radius: 8px; background: #3a6df0; color: #fff; cursor: pointer; }
+
+#settings-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+.modal-card { background: #1b1e27; padding: 24px; border-radius: 10px; display: grid; gap: 12px; min-width: 280px; }
+.modal-card h2 { margin: 0 0 4px; font-size: 18px; }
+.modal-card input[type="number"] { width: 90px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+#close-settings { background: #2a2f3d; }

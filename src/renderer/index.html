@@ -16,23 +16,36 @@
       </div>
     </header>
 
-    <main id="home">
-      <h1>Touch in STAKK</h1>
-      <p id="status">Prêt.</p>
-      <div id="patch-warn" hidden>
-        <span>Patchs de compatibilité indisponibles — le jeu risque de ne pas démarrer.</span>
-        <button id="retry">Réessayer</button>
-      </div>
-      <button id="play">Jouer</button>
-      <section class="settings">
+    <div id="patch-warn" hidden>
+      <span>Patchs de compatibilité indisponibles — le jeu risque de ne pas démarrer.</span>
+      <button id="retry">Réessayer</button>
+    </div>
+
+    <nav id="tabbar">
+      <div id="tabs"></div>
+      <button id="add-tab" title="Ajouter un compte">+</button>
+      <button id="open-settings" title="Réglages">⚙</button>
+    </nav>
+
+    <main id="views"></main>
+
+    <div id="empty" hidden>
+      <p>Aucun compte pour l'instant.</p>
+      <button id="add-first">Ajouter un compte</button>
+    </div>
+
+    <div id="settings-modal" hidden>
+      <div class="modal-card">
+        <h2>Réglages</h2>
         <label>Largeur <input id="res-w" type="number" min="960" /></label>
         <label>Hauteur <input id="res-h" type="number" min="600" /></label>
         <label><input id="muted" type="checkbox" /> Couper le son</label>
-        <button id="save">Enregistrer</button>
-      </section>
-    </main>
-
-    <webview id="game" hidden allowpopups></webview>
+        <div class="modal-actions">
+          <button id="save-settings">Enregistrer</button>
+          <button id="close-settings">Fermer</button>
+        </div>
+      </div>
+    </div>
 
     <script src="renderer.js"></script>
   </body>

@@ -1,22 +1,169 @@
 const $ = (id) => document.getElementById(id);
 
+let gameUrl = null;
+let accounts = [];
+let activeId = null;
+
 $('min').onclick = () => window.touch.windowMinimize();
 $('max').onclick = () => window.touch.windowToggleMaximize();
 $('close').onclick = () => window.touch.windowClose();
 
-let currentMuted = false;
+$('add-tab').onclick = addAccount;
+$('add-first').onclick = addAccount;
+$('open-settings').onclick = openSettings;
+$('close-settings').onclick = () => ($('settings-modal').hidden = true);
+$('save-settings').onclick = saveSettings;
+$('retry').onclick = retryPatch;
 
-async function loadSettingsIntoUI() {
+const viewId = (id) => 'view-' + id;
+const tabId = (id) => 'tab-' + id;
+
+async function init() {
+  await refreshPatchStatus();
+  gameUrl = await window.touch.getGameUrl();
+  const res = await window.touch.accountsList();
+  accounts = res.accounts;
+  for (const a of accounts) await createView(a);
+  renderTabs();
+  if (accounts.length) setActive(accounts[0].id);
+  else showEmpty(true);
+}
+
+function showEmpty(v) {
+  $('empty').hidden = !v;
+}
+
+async function createView(account) {
+  if (document.getElementById(viewId(account.id))) return;
+  const partition = 'persist:acct-' + account.id;
+  await window.touch.prepareSession(partition);
+  const wv = document.createElement('webview');
+  wv.id = viewId(account.id);
+  wv.className = 'game';
+  wv.setAttribute('partition', partition);
+  wv.setAttribute('allowpopups', '');
+  wv.setAttribute('src', gameUrl);
+  wv.hidden = true;
+  wv.addEventListener('dom-ready', async () => {
+    const s = await window.touch.getSettings();
+    if (wv.setAudioMuted) wv.setAudioMuted(s.muted);
+  });
+  $('views').appendChild(wv);
+}
+
+function removeView(id) {
+  const wv = document.getElementById(viewId(id));
+  if (wv) wv.remove();
+}
+
+function renderTabs() {
+  const box = $('tabs');
+  box.innerHTML = '';
+  for (const a of accounts) {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (a.id === activeId ? ' active' : '');
+    tab.id = tabId(a.id);
+
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+    label.textContent = a.name;
+    label.onclick = () => setActive(a.id);
+    label.ondblclick = () => renameTab(a);
+
+    const close = document.createElement('button');
+    close.className = 'tab-close';
+    close.textContent = '✕';
+    close.onclick = (e) => {
+      e.stopPropagation();
+      removeTab(a);
+    };
+
+    tab.append(label, close);
+    box.appendChild(tab);
+  }
+}
+
+function setActive(id) {
+  activeId = id;
+  showEmpty(false);
+  for (const a of accounts) {
+    const wv = document.getElementById(viewId(a.id));
+    if (wv) wv.hidden = a.id !== id;
+  }
+  renderTabs();
+}
+
+async function addAccount() {
+  const acc = await window.touch.accountsAdd();
+  accounts.push(acc);
+  await createView(acc);
+  setActive(acc.id);
+}
+
+function renameTab(a) {
+  const tab = document.getElementById(tabId(a.id));
+  const label = tab.querySelector('.tab-label');
+  const input = document.createElement('input');
+  input.className = 'tab-input';
+  input.value = a.name;
+  let committed = false;
+  const commit = async () => {
+    if (committed) return;
+    committed = true;
+    const name = input.value.trim() || a.name;
+    await window.touch.accountsRename(a.id, name);
+    a.name = name;
+    renderTabs();
+  };
+  input.onblur = commit;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') {
+      committed = true;
+      renderTabs();
+    }
+  };
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+async function removeTab(a) {
+  if (!window.confirm('Supprimer le compte "' + a.name + '" ?')) return;
+  await window.touch.accountsRemove(a.id);
+  accounts = accounts.filter((x) => x.id !== a.id);
+  removeView(a.id);
+  if (activeId === a.id) {
+    if (accounts.length) setActive(accounts[0].id);
+    else {
+      activeId = null;
+      renderTabs();
+      showEmpty(true);
+    }
+  } else {
+    renderTabs();
+  }
+}
+
+async function openSettings() {
   const s = await window.touch.getSettings();
   $('res-w').value = s.resolution.width;
   $('res-h').value = s.resolution.height;
   $('muted').checked = s.muted;
-  currentMuted = s.muted;
+  $('settings-modal').hidden = false;
 }
 
-function applyMuteToGame() {
-  const game = $('game');
-  if (game && typeof game.setAudioMuted === 'function') game.setAudioMuted(currentMuted);
+async function saveSettings() {
+  const muted = $('muted').checked;
+  await window.touch.setSettings({
+    resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
+    muted,
+  });
+  for (const a of accounts) {
+    const wv = document.getElementById(viewId(a.id));
+    if (wv && wv.setAudioMuted) wv.setAudioMuted(muted);
+  }
+  $('settings-modal').hidden = true;
 }
 
 async function refreshPatchStatus() {
@@ -24,38 +171,11 @@ async function refreshPatchStatus() {
   $('patch-warn').hidden = ok;
 }
 
-$('retry').onclick = async () => {
+async function retryPatch() {
   $('retry').disabled = true;
-  $('status').textContent = 'Nouvelle tentative…';
   const ok = await window.touch.retryPatch();
   $('patch-warn').hidden = ok;
-  $('status').textContent = ok ? 'Patchs chargés.' : 'Échec — vérifie ta connexion.';
   $('retry').disabled = false;
-};
+}
 
-$('save').onclick = async () => {
-  currentMuted = $('muted').checked;
-  await window.touch.setSettings({
-    resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
-    muted: currentMuted,
-  });
-  applyMuteToGame();
-  $('status').textContent = 'Réglages enregistrés.';
-};
-
-$('play').onclick = async () => {
-  $('status').textContent = 'Chargement du client…';
-  try {
-    const url = await window.touch.getGameUrl();
-    const game = $('game');
-    game.addEventListener('dom-ready', applyMuteToGame, { once: true });
-    game.src = url;
-    game.hidden = false;
-    $('home').hidden = true;
-  } catch (e) {
-    $('status').textContent = 'Erreur: ' + e.message;
-  }
-};
-
-loadSettingsIntoUI();
-refreshPatchStatus();
+init();
