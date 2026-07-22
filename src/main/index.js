@@ -163,6 +163,10 @@ async function boot() {
     },
   });
 
+  // Keep the game area at the client's aspect ratio (the chrome — titlebar +
+  // tab bar — is the fixed extra height), so resizing does not letterbox it.
+  mainWindow.setAspectRatio(1440 / 800, { width: 0, height: 80 });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAnkamaHost(url)) return { action: 'allow' };
     shell.openExternal(url);

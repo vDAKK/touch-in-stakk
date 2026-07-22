@@ -128,6 +128,14 @@ function injectHook() {
   script.remove();
 }
 
+// The client draws letterbox bars (.blackStripe) around the play area. Hide them
+// so the game fills the window instead of leaving black margins.
+function injectLayoutFix() {
+  const style = document.createElement('style');
+  style.textContent = '.blackStripe { display: none !important; }';
+  (document.head || document.documentElement).appendChild(style);
+}
+
 // main-world hook -> renderer host
 window.addEventListener('message', (e) => {
   if (e.source !== window || !e.data || e.data.__qol !== 'event') return;
@@ -174,8 +182,13 @@ window.addEventListener(
   true
 );
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injectHook);
-} else {
+function injectAll() {
   injectHook();
+  injectLayoutFix();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectAll);
+} else {
+  injectAll();
 }
