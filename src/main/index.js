@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 const { loadSettings, saveSettings } = require('./settings');
 const { fetchPatchSet } = require('./patcher');
 const { startProxy } = require('./proxy');
@@ -7,21 +8,54 @@ const { installSpoofing } = require('./spoof');
 
 let mainWindow = null;
 let proxy = null;
+let patchOk = false;
 
 function userDataDir() {
   return app.getPath('userData');
 }
 
-async function boot() {
-  installSpoofing(session.defaultSession);
+function logToFile(message) {
+  try {
+    const dir = path.join(userDataDir(), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const line = '[' + new Date().toISOString() + '] ' + message + '\n';
+    fs.appendFileSync(path.join(dir, 'app.log'), line, 'utf-8');
+  } catch {
+    // logging must never crash the app
+  }
+}
 
+const ANKAMA_HOSTS = ['ankama.com', 'ankama-games.com'];
+function isAnkamaHost(url) {
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  return ANKAMA_HOSTS.some((h) => host === h || host.endsWith('.' + h));
+}
+
+// Fetches the community patch set and (re)starts the local proxy with it.
+// On failure the proxy still starts (with no patches) so the app never hangs;
+// patchOk lets the renderer surface the problem and offer a retry.
+async function startOrRestartProxy() {
   let regexMap = {};
   try {
     ({ regexMap } = await fetchPatchSet());
+    patchOk = true;
   } catch (e) {
-    console.error('patch manifest fetch failed:', e.message);
+    patchOk = false;
+    logToFile('patch manifest fetch failed: ' + e.message);
   }
+  if (proxy) proxy.close();
   proxy = await startProxy({ regexMap });
+  return patchOk;
+}
+
+async function boot() {
+  installSpoofing(session.defaultSession);
+  await startOrRestartProxy();
 
   const settings = loadSettings(userDataDir());
   mainWindow = new BrowserWindow({
@@ -41,7 +75,7 @@ async function boot() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.includes('ankama.com')) return { action: 'allow' };
+    if (isAnkamaHost(url)) return { action: 'allow' };
     shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -53,6 +87,8 @@ ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
 ipcMain.handle('settings:set', (_e, partial) => saveSettings(userDataDir(), partial));
 ipcMain.handle('game:url', () => `http://127.0.0.1:${proxy.port}/game/index.html`);
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('patch:status', () => patchOk);
+ipcMain.handle('patch:retry', () => startOrRestartProxy());
 ipcMain.on('window:minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('window:toggle-maximize', () => {
   if (!mainWindow) return;

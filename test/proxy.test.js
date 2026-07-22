@@ -56,3 +56,15 @@ test('forwards the query string to the origin', async () => {
     close();
   }
 });
+
+test('sends an Android User-Agent to the origin', async () => {
+  let opts = null;
+  const http = { get: async (_url, o) => { opts = o; return { data: 'ok', headers: {} }; } };
+  const { port, close } = await startProxy({ regexMap: {}, http });
+  try {
+    await fetch(`http://127.0.0.1:${port}/game/build/script.js`);
+    assert.ok(opts.headers['User-Agent'].includes('Android'), 'expected Android UA, got: ' + opts.headers['User-Agent']);
+  } finally {
+    close();
+  }
+});
