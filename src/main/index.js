@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { pathToFileURL } = require('node:url');
 const { loadSettings, saveSettings } = require('./settings');
 const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
 const { startProxy } = require('./proxy');
@@ -173,6 +174,7 @@ async function boot() {
 ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
 ipcMain.handle('settings:set', (_e, partial) => saveSettings(userDataDir(), partial));
 ipcMain.handle('game:url', () => `http://127.0.0.1:${proxy.port}/game/index.html`);
+ipcMain.handle('game:preload-path', () => pathToFileURL(path.join(__dirname, '../preload/game.js')).href);
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('patch:status', () => patchOk);
 ipcMain.handle('patch:retry', () => startOrRestartProxy());

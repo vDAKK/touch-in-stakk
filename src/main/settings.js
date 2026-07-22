@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DEFAULT_SETTINGS = { resolution: { width: 1440, height: 800 }, muted: false };
+const DEFAULT_SETTINGS = { resolution: { width: 1440, height: 800 }, muted: false, switchOnTurn: true };
 
 function settingsPath(userDataDir) {
   return path.join(userDataDir, 'settings.json');

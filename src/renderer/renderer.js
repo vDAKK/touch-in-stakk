@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id);
 
 let gameUrl = null;
+let gamePreloadUrl = null;
+let settings = null;
 let accounts = [];
 let activeId = null;
 
@@ -20,7 +22,9 @@ const tabId = (id) => 'tab-' + id;
 
 async function init() {
   await refreshPatchStatus();
+  settings = await window.touch.getSettings();
   gameUrl = await window.touch.getGameUrl();
+  gamePreloadUrl = await window.touch.getGamePreloadUrl();
   const res = await window.touch.accountsList();
   accounts = res.accounts;
   for (const a of accounts) await createView(a);
@@ -42,11 +46,15 @@ async function createView(account) {
   wv.className = 'game';
   wv.setAttribute('partition', partition);
   wv.setAttribute('allowpopups', '');
+  wv.setAttribute('preload', gamePreloadUrl);
   wv.setAttribute('src', gameUrl);
   wv.classList.add('inactive');
-  wv.addEventListener('dom-ready', async () => {
-    const s = await window.touch.getSettings();
-    if (wv.setAudioMuted) wv.setAudioMuted(s.muted);
+  wv.addEventListener('dom-ready', () => {
+    if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
+  });
+  wv.addEventListener('ipc-message', (e) => {
+    if (e.channel !== 'qol') return;
+    handleQol(account.id, e.args[0]);
   });
   $('views').appendChild(wv);
 }
@@ -91,6 +99,13 @@ function setActive(id) {
     if (wv) wv.classList.toggle('inactive', a.id !== id);
   }
   renderTabs();
+}
+
+function handleQol(accountId, msg) {
+  if (!msg) return;
+  if (msg.type === 'my-turn' && settings.switchOnTurn && activeId !== accountId) {
+    setActive(accountId);
+  }
 }
 
 async function addAccount() {
@@ -150,14 +165,16 @@ async function openSettings() {
   $('res-w').value = s.resolution.width;
   $('res-h').value = s.resolution.height;
   $('muted').checked = s.muted;
+  $('switch-on-turn').checked = s.switchOnTurn;
   $('settings-modal').hidden = false;
 }
 
 async function saveSettings() {
   const muted = $('muted').checked;
-  await window.touch.setSettings({
+  settings = await window.touch.setSettings({
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
     muted,
+    switchOnTurn: $('switch-on-turn').checked,
   });
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
