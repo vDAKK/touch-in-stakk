@@ -5,6 +5,7 @@ let gamePreloadUrl = null;
 let settings = null;
 let accounts = [];
 let activeId = null;
+const identities = {}; // accountId -> { name, id } reported by each game hook
 
 $('min').onclick = () => window.touch.windowMinimize();
 $('max').onclick = () => window.touch.windowToggleMaximize();
@@ -12,6 +13,7 @@ $('close').onclick = () => window.touch.windowClose();
 
 $('add-tab').onclick = addAccount;
 $('add-first').onclick = addAccount;
+$('group-auto').onclick = groupAuto;
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => ($('settings-modal').hidden = true);
 $('save-settings').onclick = saveSettings;
@@ -111,10 +113,30 @@ function setActive(id) {
 
 function handleQol(accountId, msg) {
   if (!msg) return;
-  if (msg.type === 'my-turn') {
+  if (msg.type === 'identity') {
+    identities[accountId] = { name: msg.name, id: msg.id };
+  } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
     pulseTab(accountId);
   }
+}
+
+function sendToView(accountId, payload) {
+  const wv = document.getElementById(viewId(accountId));
+  if (wv) wv.send('qol', payload);
+}
+
+// Form a party across accounts: the active tab is the leader and invites every
+// other connected account; those accounts auto-accept the leader's invite.
+function groupAuto() {
+  const leader = accounts.find((a) => a.id === activeId);
+  if (!leader) return;
+  const leaderIdentity = identities[leader.id];
+  if (!leaderIdentity) return;
+  const others = accounts.filter((a) => a.id !== leader.id && identities[a.id]);
+  if (!others.length) return;
+  for (const a of others) sendToView(a.id, { type: 'expect-invite', from: leaderIdentity.name });
+  sendToView(leader.id, { type: 'invite', names: others.map((a) => identities[a.id].name) });
 }
 
 function pulseTab(id) {
