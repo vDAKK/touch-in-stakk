@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src http://127.0.0.1:* https://*.ankama.com https://*.ankama-games.com" />
+    <link rel="stylesheet" href="style.css" />
+    <title>Touch in STAKK</title>
+  </head>
+  <body>
+    <header class="titlebar">
+      <span class="title">Touch in STAKK</span>
+      <div class="win-controls">
+        <button id="min" title="Réduire">—</button>
+        <button id="max" title="Agrandir">▢</button>
+        <button id="close" title="Fermer">✕</button>
+      </div>
+    </header>
+
+    <main id="home">
+      <h1>Touch in STAKK</h1>
+      <p id="status">Prêt.</p>
+      <button id="play">Jouer</button>
+      <section class="settings">
+        <label>Largeur <input id="res-w" type="number" min="960" /></label>
+        <label>Hauteur <input id="res-h" type="number" min="600" /></label>
+        <label><input id="muted" type="checkbox" /> Couper le son</label>
+        <button id="save">Enregistrer</button>
+      </section>
+    </main>
+
+    <webview id="game" hidden allowpopups></webview>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
