@@ -59,6 +59,16 @@ async function startOrRestartProxy() {
   return patchOk;
 }
 
+// The lindo base loads a lindo-branded promo popup from lindo-app.com. It is
+// not part of this launcher, and the host resets the TLS connection (noisy SSL
+// errors), so block it outright.
+function blockThirdParty() {
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: ['*://lindo-app.com/*', '*://*.lindo-app.com/*'] },
+    (_details, callback) => callback({ cancel: true })
+  );
+}
+
 function installDiagnostics() {
   session.defaultSession.webRequest.onErrorOccurred((details) => {
     if (details.error && details.error !== 'net::ERR_ABORTED') {
@@ -79,6 +89,7 @@ function installDiagnostics() {
 async function boot() {
   logToFile('=== boot start ===');
   installSpoofing(session.defaultSession);
+  blockThirdParty();
   installDiagnostics();
   await startOrRestartProxy();
   logToFile('boot: patchOk=' + patchOk + ' proxyPort=' + (proxy && proxy.port));

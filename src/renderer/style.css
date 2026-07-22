@@ -1,5 +1,7 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* Author display rules override the UA [hidden] style, so restore it explicitly. */
+[hidden] { display: none !important; }
 body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #14161c; color: #e6e8ef; font-family: system-ui, sans-serif; }
 .titlebar { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: #0e1015; -webkit-app-region: drag; }
 .win-controls button { -webkit-app-region: no-drag; background: transparent; color: #e6e8ef; border: 0; width: 36px; height: 40px; cursor: pointer; }
