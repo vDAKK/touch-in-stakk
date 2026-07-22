@@ -26,8 +26,9 @@
     "appId": "com.stakk.touchinstakk",
     "productName": "Touch in STAKK",
     "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json"],
+    "files": ["src/**/*", "package.json", "stakk.ico"],
     "win": {
+      "icon": "stakk.ico",
       "target": [
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
