@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { loadSettings, saveSettings } = require('./settings');
-const { fetchPatchSet } = require('./patcher');
+const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
 const { startProxy } = require('./proxy');
 const { installSpoofing } = require('./spoof');
 
@@ -41,15 +41,20 @@ function isAnkamaHost(url) {
 // patchOk lets the renderer surface the problem and offer a retry.
 async function startOrRestartProxy() {
   let regexMap = {};
+  let lindoFiles = {};
   try {
-    ({ regexMap } = await fetchPatchSet());
+    const patchSet = await fetchPatchSet();
+    regexMap = patchSet.regexMap;
+    lindoFiles = lindoFilesFromManifest(patchSet.manifest);
     patchOk = true;
   } catch (e) {
     patchOk = false;
     logToFile('patch manifest fetch failed: ' + e.message);
   }
+  const appVersion = await fetchAppVersion().catch(() => FALLBACK_APP_VERSION);
+  const versions = { appVersion, buildVersion: appVersion };
   if (proxy) proxy.close();
-  proxy = await startProxy({ regexMap });
+  proxy = await startProxy({ regexMap, lindoFiles, versions });
   return patchOk;
 }
 

@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { startProxy } = require('../src/main/proxy');
+const { startProxy, injectShell } = require('../src/main/proxy');
 
 test('serves patched .js from the origin', async () => {
   const http = {
@@ -64,6 +64,46 @@ test('sends an Android User-Agent to the origin', async () => {
   try {
     await fetch(`http://127.0.0.1:${port}/game/build/script.js`);
     assert.ok(opts.headers['User-Agent'].includes('Android'), 'expected Android UA, got: ' + opts.headers['User-Agent']);
+  } finally {
+    close();
+  }
+});
+
+test('injectShell adds version globals before head and boot call before /html', () => {
+  const out = injectShell('<html><head></head><body></body></html>', { appVersion: '1.2', buildVersion: '3.4' });
+  assert.ok(out.includes('window.appVersion="1.2"'));
+  assert.ok(out.includes('window.buildVersion="3.4"'));
+  assert.ok(out.indexOf('initDofus') < out.indexOf('</html>'));
+});
+
+test('serves the injected lindo shell at /game/index.html', async () => {
+  const shell = '<html lang="fr"><head></head><body></body></html>';
+  const http = { get: async () => ({ data: shell }) };
+  const lindoFiles = { 'index.html': 'http://lindo/index.html' };
+  const versions = { appVersion: '3.11.0', buildVersion: '3.11.0' };
+  const { port, close } = await startProxy({ lindoFiles, versions, http });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/game/index.html`);
+    const text = await res.text();
+    assert.ok(res.headers.get('content-type').includes('html'));
+    assert.ok(text.includes('window.appVersion="3.11.0"'));
+    assert.ok(text.includes('initDofus'));
+  } finally {
+    close();
+  }
+});
+
+test('serves lindo files from the lindo url, unpatched', async () => {
+  let seen = '';
+  const http = { get: async (url) => { seen = url; return { data: 'FIXES' }; } };
+  const lindoFiles = { 'fixes.js': 'http://lindo/fixes.js' };
+  const regexMap = { 'fixes.js': [['FIXES', 'NOPE']] };
+  const { port, close } = await startProxy({ lindoFiles, regexMap, http });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/game/fixes.js`);
+    const text = await res.text();
+    assert.strictEqual(seen, 'http://lindo/fixes.js');
+    assert.strictEqual(text, 'FIXES');
   } finally {
     close();
   }

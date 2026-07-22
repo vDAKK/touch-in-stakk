@@ -1,6 +1,28 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { applyRegexRules, rulesForPath, fetchPatchSet } = require('../src/main/patcher');
+const { applyRegexRules, rulesForPath, fetchPatchSet, lindoFilesFromManifest, fetchAppVersion } = require('../src/main/patcher');
+
+test('lindoFilesFromManifest maps every file except regex.json', () => {
+  const manifest = { files: {
+    'index.html': { filename: 'u/index.html' },
+    'fixes.js': { filename: 'u/fixes.js' },
+    'regex.json': { filename: 'u/regex.json' },
+  } };
+  assert.deepStrictEqual(lindoFilesFromManifest(manifest), {
+    'index.html': 'u/index.html',
+    'fixes.js': 'u/fixes.js',
+  });
+});
+
+test('fetchAppVersion returns the App Store version', async () => {
+  const http = { get: async () => ({ data: { results: [{ version: '9.9.9' }] } }) };
+  assert.strictEqual(await fetchAppVersion(http), '9.9.9');
+});
+
+test('fetchAppVersion falls back to the default on error', async () => {
+  const http = { get: async () => { throw new Error('offline'); } };
+  assert.strictEqual(await fetchAppVersion(http), '3.11.0');
+});
 
 test('applyRegexRules applies real asset-rewrite rule', () => {
   const rules = [['cdvfile://localhost/persistent/data/assets', '../assets']];
