@@ -69,20 +69,81 @@ function blockThirdParty() {
   );
 }
 
-function installDiagnostics() {
-  session.defaultSession.webRequest.onErrorOccurred((details) => {
-    if (details.error && details.error !== 'net::ERR_ABORTED') {
-      logToFile('req-error ' + details.error + ' ' + details.url);
-    }
-  });
+// --- Auth callback capture ---------------------------------------------------
+// The game opens the Ankama login in a popup. On success Ankama redirects the
+// popup to `dofustouch://...?code=<code>` (a custom scheme the browser cannot
+// load). We intercept that navigation, close the popup, and hand the code back
+// to the game by invoking its own deep-link entry point, exactly as the Android
+// wrapper would.
+const AUTH_CALLBACK_SCHEME = 'dofustouch://';
+
+function isAuthCallbackUrl(url) {
+  return typeof url === 'string' && url.startsWith(AUTH_CALLBACK_SCHEME);
+}
+
+function parseAuthCallback(url) {
+  const qs = url.split('?')[1] || '';
+  const params = new URLSearchParams(qs);
+  return { code: params.get('code') || undefined, error: params.get('error') || undefined };
+}
+
+function buildAuthCompletionScript(payload) {
+  return (
+    '(function(){' +
+    'var cache=window.singletons&&window.singletons.c;' +
+    'if(!cache)return false;' +
+    'for(var m in cache){' +
+    'var c=cache[m]&&cache[m].exports;' +
+    "if(c&&typeof c.connectThroughIonicDeepLink==='function'){" +
+    'c.connectThroughIonicDeepLink(' + JSON.stringify(payload) + ');return true;}' +
+    '}return false;})();'
+  );
+}
+
+function interceptAuthRedirect(popupContents, deliver) {
+  const handle = (url, via, prevent) => {
+    if (!isAuthCallbackUrl(url)) return;
+    prevent();
+    logToFile('captured auth callback via ' + via + ' ' + url);
+    deliver(url);
+  };
+  popupContents.on('will-frame-navigate', (e) => handle(e.url, 'will-frame-navigate', () => e.preventDefault()));
+  popupContents.on('will-redirect', (e) => handle(e.url, 'will-redirect', () => e.preventDefault()));
+  popupContents.on('will-navigate', (e) => handle(e.url, 'will-navigate', () => e.preventDefault()));
+}
+
+function installGameWebviewHandlers() {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() !== 'webview') return;
+
     contents.on('did-fail-load', (_e2, code, desc, url) => {
       logToFile('webview did-fail-load ' + code + ' ' + desc + ' ' + url);
     });
     contents.on('console-message', (_e2, level, message, line, sourceId) => {
       logToFile('webview console[' + level + '] ' + message + ' (' + sourceId + ':' + line + ')');
     });
+
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isAnkamaHost(url)) return { action: 'allow' };
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
+
+    contents.on('did-create-window', (popup) => {
+      logToFile('auth popup created');
+      interceptAuthRedirect(popup.webContents, (callbackUrl) => {
+        if (!popup.isDestroyed()) popup.close();
+        contents.executeJavaScript(buildAuthCompletionScript(parseAuthCallback(callbackUrl)));
+      });
+    });
+  });
+}
+
+function installDiagnostics() {
+  session.defaultSession.webRequest.onErrorOccurred((details) => {
+    if (details.error && details.error !== 'net::ERR_ABORTED') {
+      logToFile('req-error ' + details.error + ' ' + details.url);
+    }
   });
 }
 
@@ -90,6 +151,7 @@ async function boot() {
   logToFile('=== boot start ===');
   installSpoofing(session.defaultSession);
   blockThirdParty();
+  installGameWebviewHandlers();
   installDiagnostics();
   await startOrRestartProxy();
   logToFile('boot: patchOk=' + patchOk + ' proxyPort=' + (proxy && proxy.port));

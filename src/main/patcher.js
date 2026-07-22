@@ -12,9 +12,14 @@ const FALLBACK_APP_VERSION = '3.11.0';
 // so an un-repaired capture swallows the closing `}` and the following tokens,
 // producing invalid JS. Narrow the class to also stop at `}` and `)`.
 function repairSearch(search) {
-  // The class may spell the newline as a literal backslash-n or as an actual
-  // newline character, depending on how regex.json was authored; handle both.
-  return search.replace(/\[\^,(\\n|\n)\]/g, '[^,$1})]');
+  // (1) The class may spell the newline as a literal backslash-n or an actual
+  //     newline; narrow both to also stop values at a brace/paren.
+  let out = search.replace(/\[\^,(\\n|\n)\]/g, '[^,$1})]');
+  // (2) Some lindo rules were authored against a pretty-printed build and carry
+  //     literal spaces (e.g. `t.m = e`) that the current minified build omits.
+  //     Make every literal space optional so the rules still match.
+  out = out.split(' ').join(' ?');
+  return out;
 }
 
 function applyRegexRules(source, ruleList) {
