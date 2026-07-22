@@ -80,6 +80,21 @@ function gameHook() {
         }
       } catch (e) {}
     });
+
+    // A private message (whisper) was received on this account.
+    gui.on('ChatServerMessage', function (msg) {
+      try {
+        // PSEUDO_CHANNEL_PRIVATE = 9; ignore our own outgoing whispers.
+        if (msg && msg.channel === 9 && msg.senderId !== gui.playerData.id) {
+          emit({ type: 'whisper', from: msg.senderName });
+        }
+      } catch (e) {}
+    });
+
+    // This account lost its connection to the game server.
+    gui.on('disconnect', function () {
+      emit({ type: 'disconnected' });
+    });
   }
 
   function ready() {

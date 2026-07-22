@@ -184,9 +184,51 @@ function handleQol(accountId, msg) {
     identities[accountId] = { name: msg.name, id: msg.id };
   } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
-    else if (activeId !== accountId) setAlert(accountId, true);
+    else if (activeId !== accountId) {
+      setAlert(accountId, true);
+      if (settings.notifications) beep();
+    }
     pulseTab(accountId);
+  } else if (msg.type === 'whisper') {
+    notify(accountId, 'Message privé de ' + (msg.from || '?'));
+  } else if (msg.type === 'disconnected') {
+    notify(accountId, 'Déconnecté du jeu');
   }
+}
+
+function accountName(id) {
+  const a = accounts.find((x) => x.id === id);
+  return a ? a.name : 'Compte';
+}
+
+// Badge the tab, play a short tone, and raise a desktop notification (unless the
+// tab is already the active one).
+function notify(accountId, text) {
+  if (activeId !== accountId) setAlert(accountId, true);
+  if (!settings.notifications) return;
+  beep();
+  try {
+    if (window.Notification) new Notification(accountName(accountId), { body: text, silent: true });
+  } catch (e) {}
+}
+
+let audioCtx = null;
+function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const t = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    osc.start(t);
+    osc.stop(t + 0.26);
+  } catch (e) {}
 }
 
 function sendToView(accountId, payload) {
@@ -291,6 +333,7 @@ async function openSettings() {
   $('res-h').value = s.resolution.height;
   $('muted').checked = s.muted;
   $('switch-on-turn').checked = s.switchOnTurn;
+  $('notifications').checked = s.notifications;
   $('settings-modal').hidden = false;
 }
 
@@ -300,6 +343,7 @@ async function saveSettings() {
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
     muted,
     switchOnTurn: $('switch-on-turn').checked,
+    notifications: $('notifications').checked,
   });
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
