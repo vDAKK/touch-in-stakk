@@ -7,19 +7,18 @@ let accounts = [];
 let activeId = null;
 const identities = {}; // accountId -> { name, id } reported by each game hook
 
-// Remappable in-game actions. gameKey is the native Dofus Touch key the action
-// sends; the user can bind a different trigger key to it (active account only).
+// In-game actions the launcher can trigger (the touch client has no native
+// keyboard shortcuts, so each opens the game's own window). The user assigns a
+// trigger key to each; it applies to the active account.
 const KEYBIND_ACTIONS = [
-  { id: 'inventory', label: 'Inventaire', gameKey: 'i' },
-  { id: 'spellMenu', label: 'Menu des sorts', gameKey: 's' },
-  { id: 'map', label: 'Carte', gameKey: 'm' },
-  { id: 'character', label: 'Personnage', gameKey: 'c' },
-  { id: 'spell1', label: 'Sort 1', gameKey: '1' },
-  { id: 'spell2', label: 'Sort 2', gameKey: '2' },
-  { id: 'spell3', label: 'Sort 3', gameKey: '3' },
-  { id: 'spell4', label: 'Sort 4', gameKey: '4' },
-  { id: 'spell5', label: 'Sort 5', gameKey: '5' },
-  { id: 'spell6', label: 'Sort 6', gameKey: '6' },
+  { id: 'inventory', label: 'Inventaire', defaultKey: 'i' },
+  { id: 'character', label: 'Personnage', defaultKey: 'c' },
+  { id: 'spells', label: 'Sorts', defaultKey: 's' },
+  { id: 'map', label: 'Carte', defaultKey: 'm' },
+  { id: 'social', label: 'Amis / Social', defaultKey: 'f' },
+  { id: 'options', label: 'Options', defaultKey: 'o' },
+  { id: 'mount', label: 'Monture', defaultKey: 'p' },
+  { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
 ];
 
 $('min').onclick = () => window.touch.windowMinimize();
@@ -128,13 +127,13 @@ async function createView(account) {
   wv.classList.add('inactive');
   wv.addEventListener('dom-ready', () => {
     if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
-    wv.send('keybinds', computeRemapMap());
+    wv.send('keybinds', computeKeyToAction());
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
     else if (e.channel === 'hotkey') handleHotkey(e.args[0]);
     else if (e.channel === 'bcast-key') handleBcastKey(account.id, e.args[0]);
-    else if (e.channel === 'remap') handleRemap(account.id, e.args[0]);
+    else if (e.channel === 'bcast-action') handleBcastAction(account.id, e.args[0]);
   });
   $('views').appendChild(wv);
 }
@@ -202,6 +201,7 @@ function handleQol(accountId, msg) {
   if (!msg) return;
   if (msg.type === 'identity') {
     identities[accountId] = { name: msg.name, id: msg.id };
+    autoNameTab(accountId, msg.name);
   } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
     else if (activeId !== accountId) {
@@ -251,6 +251,16 @@ function beep() {
   } catch (e) {}
 }
 
+// Name the tab after the connected character.
+async function autoNameTab(accountId, charName) {
+  if (!charName) return;
+  const a = accounts.find((x) => x.id === accountId);
+  if (!a || a.name === charName) return;
+  a.name = charName;
+  renderTabs();
+  await window.touch.accountsRename(accountId, charName);
+}
+
 function sendToView(accountId, payload) {
   const wv = document.getElementById(viewId(accountId));
   if (wv) wv.send('qol', payload);
@@ -290,25 +300,31 @@ function updateBroadcastSource() {
   }
 }
 
-function handleRemap(accountId, data) {
-  if (!data || !data.gameKey) return;
-  const wv = document.getElementById(viewId(accountId));
-  if (wv) window.touch.broadcastKey([wv.getWebContentsId()], data.gameKey);
+// Mirror an action from the active account to the others while broadcasting.
+function handleBcastAction(sourceId, data) {
+  if (!broadcasting || sourceId !== activeId || !data || !data.action) return;
+  for (const a of accounts) {
+    if (a.id !== sourceId) sendToView(a.id, { type: 'action', action: data.action });
+  }
 }
 
-// triggerKey -> gameKey, only for actions the user rebound to a different key.
-function computeRemapMap() {
+function keybindKey(action) {
   const binds = (settings && settings.keybinds) || {};
+  return binds[action.id] || action.defaultKey;
+}
+
+// triggerKey -> actionId, pushed to each game preload.
+function computeKeyToAction() {
   const map = {};
   for (const a of KEYBIND_ACTIONS) {
-    const trigger = binds[a.id] || a.gameKey;
-    if (trigger && trigger !== a.gameKey) map[trigger] = a.gameKey;
+    const k = keybindKey(a);
+    if (k) map[k] = a.id;
   }
   return map;
 }
 
 function pushKeybinds() {
-  const map = computeRemapMap();
+  const map = computeKeyToAction();
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
     if (wv) wv.send('keybinds', map);
@@ -331,7 +347,7 @@ function renderKeybinds() {
     const key = document.createElement('button');
     key.type = 'button';
     key.className = 'kb-key' + (capturingAction === a.id ? ' capturing' : '');
-    key.textContent = capturingAction === a.id ? '…' : keyLabel(editingKeybinds[a.id] || a.gameKey);
+    key.textContent = capturingAction === a.id ? '…' : keyLabel(editingKeybinds[a.id] || a.defaultKey);
     key.onclick = () => startCapture(a.id);
     row.append(label, key);
     box.appendChild(row);
@@ -340,6 +356,7 @@ function renderKeybinds() {
 
 function keyLabel(k) {
   if (k === ' ') return 'Espace';
+  if (k === 'Escape') return 'Échap';
   return k.length === 1 ? k.toUpperCase() : k;
 }
 

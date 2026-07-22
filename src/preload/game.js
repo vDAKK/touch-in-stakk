@@ -24,6 +24,48 @@ function gameHook() {
     } catch (e) {}
   }
 
+  // The client is touch-first and has no keyboard shortcuts, so actions call the
+  // game's own window manager (found in the webpack module cache) directly.
+  var _wm = null;
+  function windowsManager() {
+    if (_wm) return _wm;
+    try {
+      var cache = window.singletons && window.singletons.c;
+      for (var k in cache) {
+        var ex = cache[k] && cache[k].exports;
+        var wm = ex && ex.open && ex.closeAll ? ex : ex && ex.di ? ex.di : null;
+        if (wm && typeof wm.open === 'function' && typeof wm.closeAll === 'function' && typeof wm.getWindow === 'function') {
+          _wm = wm;
+          return _wm;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  var ACTION_WINDOW = {
+    inventory: ['equipEntity', { tabId: 'heroInventory' }],
+    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
+    spells: ['equipEntity', { tabId: 'heroSpells' }],
+    map: ['worldMap', undefined],
+    social: ['social', undefined],
+    options: ['options', undefined],
+    mount: ['mount', undefined],
+  };
+
+  function doAction(action) {
+    var wm = windowsManager();
+    if (!wm) return;
+    try {
+      if (action === 'close') {
+        wm.closeAll();
+        return;
+      }
+      var w = ACTION_WINDOW[action];
+      if (w) wm.open(w[0], w[1]);
+    } catch (e) {}
+  }
+
   // Commands from the renderer host (relayed by the preload as window messages).
   window.addEventListener('message', function (e) {
     if (e.source !== window || !e.data || e.data.__qol !== 'cmd') return;
@@ -53,6 +95,8 @@ function gameHook() {
       } catch (e) {}
     } else if (p.type === 'ready') {
       send('GameFightReadyMessage', { isReady: p.value !== false });
+    } else if (p.type === 'action') {
+      doAction(p.action);
     }
   });
 
@@ -153,10 +197,10 @@ ipcRenderer.on('bcast-mode', (_e, on) => {
   bcastSource = !!on;
 });
 
-// User key remaps for this account: triggerKey -> gameKey to send instead.
-let remapMap = {};
+// User keybinds for this account: triggerKey -> action id.
+let keyToAction = {};
 ipcRenderer.on('keybinds', (_e, map) => {
-  remapMap = map || {};
+  keyToAction = map || {};
 });
 
 function isTyping() {
@@ -180,15 +224,17 @@ window.addEventListener(
       return;
     }
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
-    // Remap a configured trigger key to another game key on this account.
-    if (plain && remapMap[e.key]) {
+    const action = plain ? keyToAction[e.key] : null;
+    // A bound key triggers its game action on this (active) account, and mirrors
+    // it to the other accounts when broadcast is on.
+    if (action) {
       e.preventDefault();
       e.stopPropagation();
-      ipcRenderer.sendToHost('remap', { gameKey: remapMap[e.key] });
+      window.postMessage({ __qol: 'cmd', payload: { type: 'action', action } }, '*');
+      if (bcastSource) ipcRenderer.sendToHost('bcast-action', { action });
       return;
     }
-    // Broadcast plain key presses from the active account to the others. The
-    // source account still acts on the key itself; only the mirror is added.
+    // Broadcast other plain key presses too (some game inputs are key-driven).
     if (bcastSource && plain) {
       ipcRenderer.sendToHost('bcast-key', { key: e.key });
     }
