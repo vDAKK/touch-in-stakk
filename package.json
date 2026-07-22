@@ -1,0 +1,21 @@
+{
+  "name": "touch-in-stakk",
+  "productName": "Touch in STAKK",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Launcher desktop pour Dofus Touch",
+  "license": "MIT",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}
