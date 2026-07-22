@@ -30,3 +30,29 @@ test('returns 502 on upstream error', async () => {
     close();
   }
 });
+
+test('passes binary assets through unpatched with upstream content-type', async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  const http = { get: async () => ({ data: png, headers: { 'content-type': 'image/png' } }) };
+  const { port, close } = await startProxy({ regexMap: {}, http });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/game/assets/logo.png`);
+    assert.strictEqual(res.headers.get('content-type'), 'image/png');
+    const bytes = Buffer.from(await res.arrayBuffer());
+    assert.deepStrictEqual([bytes[0], bytes[1], bytes[2], bytes[3]], [0x89, 0x50, 0x4e, 0x47]);
+  } finally {
+    close();
+  }
+});
+
+test('forwards the query string to the origin', async () => {
+  let seen = '';
+  const http = { get: async (url) => { seen = url; return { data: 'ok' }; } };
+  const { port, close } = await startProxy({ regexMap: {}, http });
+  try {
+    await fetch(`http://127.0.0.1:${port}/game/build/script.js?v=1.6.0`);
+    assert.ok(seen.endsWith('/build/script.js?v=1.6.0'), 'expected query forwarded, got: ' + seen);
+  } finally {
+    close();
+  }
+});

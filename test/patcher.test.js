@@ -21,6 +21,13 @@ test('rulesForPath matches by suffix', () => {
   assert.deepStrictEqual(rulesForPath(map, 'other.js'), []);
 });
 
+test('rulesForPath does not match on a filename collision', () => {
+  const map = { 'script.js': [['a', 'b']] };
+  assert.deepStrictEqual(rulesForPath(map, 'script.js'), [['a', 'b']]);
+  assert.deepStrictEqual(rulesForPath(map, 'foo/script.js'), [['a', 'b']]);
+  assert.deepStrictEqual(rulesForPath(map, 'foo/notscript.js'), []);
+});
+
 test('fetchPatchSet resolves regex.json via manifest (mocked http)', async () => {
   const manifest = { files: { 'regex.json': { filename: 'http://x/regex.json', version: '1' } } };
   const regexMap = { 'build/script.js': [['a', 'b']] };

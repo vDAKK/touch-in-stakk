@@ -28,3 +28,11 @@ test('merges partial save over defaults', () => {
   assert.strictEqual(s.muted, true);
   assert.deepStrictEqual(s.resolution, DEFAULT_SETTINGS.resolution);
 });
+
+test('nested resolution falls back to default height when only width given', () => {
+  const dir = tmp();
+  saveSettings(dir, { resolution: { width: 1920 } });
+  const s = loadSettings(dir);
+  assert.strictEqual(s.resolution.width, 1920);
+  assert.strictEqual(s.resolution.height, DEFAULT_SETTINGS.resolution.height);
+});

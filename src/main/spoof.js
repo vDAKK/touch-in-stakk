@@ -29,12 +29,19 @@ function deleteHeaderCI(obj, name) {
   }
 }
 
+function hostOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
 function spoofHeaders(headers, url, seed = 0) {
   const out = { ...headers };
   for (const h of STRIPPED_HEADERS) deleteHeaderCI(out, h);
-  if (REFERER_STRIPPED_HOSTS.some((host) => url.includes(host))) {
-    deleteHeaderCI(out, 'referer');
-  }
+  if (REFERER_STRIPPED_HOSTS.includes(hostOf(url))) deleteHeaderCI(out, 'referer');
+  deleteHeaderCI(out, 'user-agent');
   out['User-Agent'] = pickUserAgent(seed);
   return out;
 }

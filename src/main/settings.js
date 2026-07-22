@@ -10,7 +10,12 @@ function settingsPath(userDataDir) {
 function loadSettings(userDataDir) {
   try {
     const raw = fs.readFileSync(settingsPath(userDataDir), 'utf-8');
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      resolution: { ...DEFAULT_SETTINGS.resolution, ...(parsed.resolution || {}) },
+    };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -18,7 +23,11 @@ function loadSettings(userDataDir) {
 
 function saveSettings(userDataDir, partial) {
   fs.mkdirSync(userDataDir, { recursive: true });
-  const merged = { ...DEFAULT_SETTINGS, ...partial };
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...partial,
+    resolution: { ...DEFAULT_SETTINGS.resolution, ...((partial && partial.resolution) || {}) },
+  };
   fs.writeFileSync(settingsPath(userDataDir), JSON.stringify(merged, null, 2), 'utf-8');
   return merged;
 }

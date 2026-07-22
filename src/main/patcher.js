@@ -13,7 +13,7 @@ function applyRegexRules(source, ruleList) {
 
 function rulesForPath(regexMap, gamePath) {
   for (const key of Object.keys(regexMap)) {
-    if (gamePath === key || gamePath.endsWith(key)) return regexMap[key];
+    if (gamePath === key || gamePath.endsWith('/' + key)) return regexMap[key];
   }
   return [];
 }

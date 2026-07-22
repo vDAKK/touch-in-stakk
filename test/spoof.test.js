@@ -29,3 +29,25 @@ test('pickUserAgent stays within the list', () => {
     assert.ok(ANDROID_USER_AGENTS.some((base) => ua.startsWith(base)));
   }
 });
+
+test('removes a pre-existing desktop User-Agent regardless of case', () => {
+  const out = spoofHeaders({ 'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Desktop' }, 'https://x/', 0);
+  const uaKeys = Object.keys(out).filter((k) => k.toLowerCase() === 'user-agent');
+  assert.strictEqual(uaKeys.length, 1);
+  assert.strictEqual(out['User-Agent'].includes('Android'), true);
+  assert.strictEqual(out['User-Agent'].includes('Desktop'), false);
+});
+
+test('strips every configured fingerprint header', () => {
+  const input = {
+    'sec-ch-ua': '1', 'sec-ch-ua-mobile': '1', 'sec-ch-ua-platform': '1',
+    'Sec-Fetch-Dest': '1', 'Sec-Fetch-Mode': '1', 'Sec-Fetch-Site': '1',
+  };
+  const out = spoofHeaders(input, 'https://x/', 0);
+  for (const k of Object.keys(input)) assert.strictEqual(out[k], undefined);
+});
+
+test('keeps Referer for a lookalike host (exact-host match only)', () => {
+  const out = spoofHeaders({ Referer: 'r' }, 'https://static.ankama.com.evil.com/x', 0);
+  assert.strictEqual(out['Referer'], 'r');
+});

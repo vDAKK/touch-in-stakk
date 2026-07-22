@@ -20,17 +20,24 @@ function createProxyApp({ regexMap = {}, origin = GAME_ORIGIN, http = axios } = 
   app.use(cors());
   app.get('/game/*', async (req, res) => {
     const gamePath = req.params[0];
+    const qIndex = req.originalUrl.indexOf('?');
+    const qs = qIndex >= 0 ? req.originalUrl.slice(qIndex) : '';
+    const upstreamUrl = origin + gamePath + qs;
     try {
-      const upstream = await http.get(origin + gamePath, {
-        responseType: 'text',
-        transformResponse: (d) => d,
-      });
-      let body = upstream.data;
       if (gamePath.endsWith('.js')) {
-        body = applyRegexRules(body, rulesForPath(regexMap, gamePath));
+        const upstream = await http.get(upstreamUrl, {
+          responseType: 'text',
+          transformResponse: (d) => d,
+        });
+        const body = applyRegexRules(upstream.data, rulesForPath(regexMap, gamePath));
+        res.set('content-type', contentType(gamePath));
+        res.send(body);
+      } else {
+        const upstream = await http.get(upstreamUrl, { responseType: 'arraybuffer' });
+        const ct = (upstream.headers && upstream.headers['content-type']) || contentType(gamePath);
+        res.set('content-type', ct);
+        res.send(Buffer.from(upstream.data));
       }
-      res.set('content-type', contentType(gamePath));
-      res.send(body);
     } catch (e) {
       res.status(502).send('proxy error: ' + e.message);
     }
