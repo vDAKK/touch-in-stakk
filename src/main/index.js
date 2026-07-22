@@ -47,9 +47,10 @@ async function startOrRestartProxy() {
     regexMap = patchSet.regexMap;
     lindoFiles = lindoFilesFromManifest(patchSet.manifest);
     patchOk = true;
+    logToFile('patch fetch OK, files=' + Object.keys(lindoFiles).join(','));
   } catch (e) {
     patchOk = false;
-    logToFile('patch manifest fetch failed: ' + e.message);
+    logToFile('patch fetch FAILED: ' + e.message + ' | code=' + (e.code || '') + ' | ' + String(e.stack || '').split('\n')[0]);
   }
   const appVersion = await fetchAppVersion().catch(() => FALLBACK_APP_VERSION);
   const versions = { appVersion, buildVersion: appVersion };
@@ -58,9 +59,29 @@ async function startOrRestartProxy() {
   return patchOk;
 }
 
+function installDiagnostics() {
+  session.defaultSession.webRequest.onErrorOccurred((details) => {
+    if (details.error && details.error !== 'net::ERR_ABORTED') {
+      logToFile('req-error ' + details.error + ' ' + details.url);
+    }
+  });
+  app.on('web-contents-created', (_e, contents) => {
+    if (contents.getType() !== 'webview') return;
+    contents.on('did-fail-load', (_e2, code, desc, url) => {
+      logToFile('webview did-fail-load ' + code + ' ' + desc + ' ' + url);
+    });
+    contents.on('console-message', (_e2, level, message, line, sourceId) => {
+      logToFile('webview console[' + level + '] ' + message + ' (' + sourceId + ':' + line + ')');
+    });
+  });
+}
+
 async function boot() {
+  logToFile('=== boot start ===');
   installSpoofing(session.defaultSession);
+  installDiagnostics();
   await startOrRestartProxy();
+  logToFile('boot: patchOk=' + patchOk + ' proxyPort=' + (proxy && proxy.port));
 
   const settings = loadSettings(userDataDir());
   mainWindow = new BrowserWindow({

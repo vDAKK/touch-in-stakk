@@ -36,6 +36,14 @@ test('applyRegexRules supports capture groups', () => {
   assert.ok(out.includes('client:"android"'));
 });
 
+test('applyRegexRules stops a value capture at a closing brace', () => {
+  // The lindo value class is [^,\n]* — without repair it would swallow the `}`
+  // that closes the object literal and corrupt the following tokens.
+  const rules = [['(v:)([^,\\n]*)', '$1X']];
+  const out = applyRegexRules('{a:1,v:P}next', rules);
+  assert.strictEqual(out, '{a:1,v:X}next');
+});
+
 test('rulesForPath matches by suffix', () => {
   const map = { 'build/script.js': [['a', 'b']] };
   assert.deepStrictEqual(rulesForPath(map, 'build/script.js'), [['a', 'b']]);

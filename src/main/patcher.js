@@ -7,10 +7,20 @@ const GAME_ORIGIN = 'https://dt-proxy-production-login.ankama-games.com/';
 const APP_STORE_LOOKUP = 'https://itunes.apple.com/lookup?id=1041406978';
 const FALLBACK_APP_VERSION = '3.11.0';
 
+// lindo's value captures `([^,\n]*)` assume a comma-terminated property value.
+// The current Ankama build ends some values at a brace (e.g. `buildVersion:P}`),
+// so an un-repaired capture swallows the closing `}` and the following tokens,
+// producing invalid JS. Narrow the class to also stop at `}` and `)`.
+function repairSearch(search) {
+  // The class may spell the newline as a literal backslash-n or as an actual
+  // newline character, depending on how regex.json was authored; handle both.
+  return search.replace(/\[\^,(\\n|\n)\]/g, '[^,$1})]');
+}
+
 function applyRegexRules(source, ruleList) {
   let out = source;
   for (const [search, replace] of ruleList) {
-    out = out.replace(new RegExp(search, 'g'), replace);
+    out = out.replace(new RegExp(repairSearch(search), 'g'), replace);
   }
   return out;
 }
