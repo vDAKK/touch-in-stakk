@@ -20,6 +20,10 @@ $('retry').onclick = retryPatch;
 const viewId = (id) => 'view-' + id;
 const tabId = (id) => 'tab-' + id;
 
+// A stable colour per account so tabs are distinguishable at a glance.
+const TAB_COLORS = ['#2fd08a', '#e6b450', '#5b8def', '#e5737b', '#b98cf0', '#40c4d6', '#e08a4a', '#7fce5a'];
+const accountColor = (id) => TAB_COLORS[(id - 1) % TAB_COLORS.length];
+
 async function init() {
   await refreshPatchStatus();
   settings = await window.touch.getSettings();
@@ -72,6 +76,10 @@ function renderTabs() {
     tab.className = 'tab' + (a.id === activeId ? ' active' : '');
     tab.id = tabId(a.id);
 
+    const dot = document.createElement('span');
+    dot.className = 'tab-dot';
+    dot.style.background = accountColor(a.id);
+
     const label = document.createElement('span');
     label.className = 'tab-label';
     label.textContent = a.name;
@@ -86,7 +94,7 @@ function renderTabs() {
       removeTab(a);
     };
 
-    tab.append(label, close);
+    tab.append(dot, label, close);
     box.appendChild(tab);
   }
 }
@@ -103,9 +111,17 @@ function setActive(id) {
 
 function handleQol(accountId, msg) {
   if (!msg) return;
-  if (msg.type === 'my-turn' && settings.switchOnTurn && activeId !== accountId) {
-    setActive(accountId);
+  if (msg.type === 'my-turn') {
+    if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
+    pulseTab(accountId);
   }
+}
+
+function pulseTab(id) {
+  const tab = document.getElementById(tabId(id));
+  if (!tab) return;
+  tab.classList.add('turn');
+  setTimeout(() => tab.classList.remove('turn'), 2500);
 }
 
 async function addAccount() {

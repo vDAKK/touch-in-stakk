@@ -1,41 +1,334 @@
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  --bg: #0e1216;
+  --surface: #161b22;
+  --surface-2: #1e242e;
+  --surface-3: #262e3a;
+  --border: #2a313c;
+  --text: #e8ecf2;
+  --text-dim: #8b94a3;
+  --accent: #2fd08a;
+  --accent-soft: rgba(47, 208, 138, 0.14);
+  --accent-dim: #1f6f52;
+  --gold: #e6b450;
+  --danger: #e5484d;
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --titlebar-h: 38px;
+  --tabbar-h: 42px;
+}
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #14161c; color: #e6e8ef; font-family: system-ui, sans-serif; }
-.titlebar { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: #0e1015; -webkit-app-region: drag; }
-.win-controls button { -webkit-app-region: no-drag; background: transparent; color: #e6e8ef; border: 0; width: 36px; height: 40px; cursor: pointer; }
-.win-controls button:hover { background: #23262f; }
-#close:hover { background: #b02525; }
 
-#patch-warn { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #3a2a12; border-bottom: 1px solid #7a5a1a; color: #f0d9a8; font-size: 13px; }
-#patch-warn button { background: #7a5a1a; color: #fff; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  overflow: hidden;
+}
 
-#tabbar { display: flex; align-items: stretch; gap: 4px; padding: 4px 6px; background: #0e1015; -webkit-app-region: drag; }
-#tabs { display: flex; gap: 4px; }
-.tab { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 12px; height: 34px; background: #1b1e27; border-radius: 6px 6px 0 0; cursor: pointer; max-width: 200px; }
-.tab.active { background: #2a2f3d; }
-.tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tab-input { width: 120px; background: #0e1015; color: #e6e8ef; border: 1px solid #3a6df0; border-radius: 4px; }
-.tab-close { background: transparent; color: #9aa0ad; border: 0; cursor: pointer; font-size: 12px; }
-.tab-close:hover { color: #fff; }
-#add-tab, #open-settings { -webkit-app-region: no-drag; background: #1b1e27; color: #e6e8ef; border: 0; border-radius: 6px; width: 34px; height: 34px; cursor: pointer; }
-#add-tab:hover, #open-settings:hover { background: #2a2f3d; }
-#open-settings { margin-left: auto; }
+button { font-family: inherit; }
 
-#views { flex: 1; position: relative; }
-/* All account webviews stay full-size and rendered (WebGL needs a real size to
-   initialise, so display:none would leave inactive tabs black); the inactive
-   ones are just made transparent and non-interactive behind the active one. */
+/* ---------- Titlebar ---------- */
+.titlebar {
+  height: var(--titlebar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand-mark {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  box-shadow: 0 0 10px rgba(47, 208, 138, 0.45);
+}
+.brand-name { font-size: 12.5px; letter-spacing: 0.3px; color: var(--text-dim); }
+.brand-name b { color: var(--text); font-weight: 700; letter-spacing: 0.6px; }
+
+.win-controls { display: flex; -webkit-app-region: no-drag; height: 100%; }
+.win-btn {
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-dim);
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.win-btn:hover { background: var(--surface-2); color: var(--text); }
+.win-close:hover { background: var(--danger); color: #fff; }
+
+/* ---------- Patch warning ---------- */
+#patch-warn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(230, 180, 80, 0.1);
+  border-bottom: 1px solid rgba(230, 180, 80, 0.35);
+  color: #f0d9a8;
+  font-size: 13px;
+}
+.warn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px var(--gold); flex: 0 0 auto; }
+#patch-warn span:nth-child(2) { flex: 1; }
+.btn-warn {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid rgba(230, 180, 80, 0.5);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.btn-warn:hover { background: rgba(230, 180, 80, 0.15); }
+
+/* ---------- Tab bar ---------- */
+#tabbar {
+  height: var(--tabbar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+#tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+#tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  position: relative;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 11px;
+  height: 32px;
+  min-width: 118px;
+  max-width: 190px;
+  background: transparent;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover { background: var(--surface-2); color: var(--text); }
+.tab.active { background: var(--surface-2); color: var(--text); }
+.tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 8px; right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(47, 208, 138, 0.55);
+}
+.tab-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25); }
+.tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.tab-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 2px 5px;
+  font: inherit;
+  font-size: 13px;
+}
+.tab-close {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  background: transparent;
+  color: var(--text-dim);
+  border: 0; border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px; line-height: 1;
+  opacity: 0.6;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
+}
+.tab:hover .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--danger); color: #fff; }
+
+/* Signature: a tab pulses gold when it is that account's combat turn */
+@keyframes turn-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(230, 180, 80, 0); }
+  50% { box-shadow: inset 0 0 0 1px rgba(230, 180, 80, 0.9), 0 0 12px rgba(230, 180, 80, 0.35); }
+}
+.tab.turn { animation: turn-pulse 0.9s ease-in-out infinite; }
+.tab.turn .tab-dot { background: var(--gold) !important; box-shadow: 0 0 8px var(--gold); }
+
+.bar-btn {
+  -webkit-app-region: no-drag;
+  align-self: center;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  background: transparent;
+  color: var(--text-dim);
+  border: 0; border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bar-btn:hover { background: var(--surface-2); color: var(--text); }
+.bar-btn-end { margin-left: auto; }
+
+/* ---------- Game views ---------- */
+#views { flex: 1; position: relative; background: #000; }
+/* Keep every account webview full-size and rendered (display:none would leave
+   inactive tabs black because WebGL initialises at 0x0); fade inactive ones out
+   behind the active one. */
 .game { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .game.inactive { opacity: 0; pointer-events: none; z-index: 0; }
 .game:not(.inactive) { z-index: 1; }
 
-#empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
-#empty button, .modal-actions button { padding: 10px 24px; border: 0; border-radius: 8px; background: #3a6df0; color: #fff; cursor: pointer; }
+/* ---------- Empty state ---------- */
+#empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+}
+.empty-mark {
+  width: 54px; height: 54px;
+  border-radius: 12px;
+  transform: rotate(45deg);
+  margin-bottom: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  position: relative;
+}
+.empty-mark::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  opacity: 0.85;
+  box-shadow: 0 0 20px rgba(47, 208, 138, 0.3);
+}
+#empty h2 { margin: 0; font-size: 19px; font-weight: 650; }
+#empty p { margin: 0 0 16px; color: var(--text-dim); max-width: 320px; line-height: 1.5; }
 
-#settings-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
-.modal-card { background: #1b1e27; padding: 24px; border-radius: 10px; display: grid; gap: 12px; min-width: 280px; }
-.modal-card h2 { margin: 0 0 4px; font-size: 18px; }
-.modal-card input[type="number"] { width: 90px; }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
-#close-settings { background: #2a2f3d; }
+/* ---------- Buttons ---------- */
+.btn-primary {
+  padding: 10px 22px;
+  border: 0; border-radius: 9px;
+  background: var(--accent);
+  color: #07110c;
+  font-weight: 650;
+  cursor: pointer;
+  transition: filter 0.12s, transform 0.06s;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-ghost {
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+
+/* ---------- Settings modal ---------- */
+#settings-modal {
+  position: fixed; inset: 0;
+  background: rgba(6, 9, 12, 0.62);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+}
+.modal-card {
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.modal-card h2 { margin: 0 0 18px; font-size: 17px; font-weight: 650; }
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+.field:first-of-type { border-top: 0; }
+.field-label { color: var(--text); font-size: 13.5px; }
+.toggle-field { cursor: pointer; }
+.res-inputs { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
+.res-inputs input {
+  width: 74px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  font: inherit;
+}
+.res-inputs input:focus { outline: none; border-color: var(--accent); }
+
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 40px; height: 23px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.15s, background 0.15s;
+}
+.switch:checked { background: var(--accent-soft); border-color: var(--accent); }
+.switch:checked::after { transform: translateX(17px); background: var(--accent); }
+
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+/* ---------- Focus + motion ---------- */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
