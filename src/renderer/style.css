@@ -196,6 +196,7 @@ button { font-family: inherit; }
 }
 .bar-btn:hover { background: var(--surface-2); color: var(--text); }
 .bar-btn-end { margin-left: auto; }
+.bar-btn.on { background: var(--accent-soft); color: var(--accent); }
 
 /* ---------- Game views ---------- */
 #views { flex: 1; position: relative; background: #000; }

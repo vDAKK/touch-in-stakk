@@ -38,6 +38,21 @@ function gameHook() {
       expectInviteFrom = p.from;
       if (expectTimer) clearTimeout(expectTimer);
       expectTimer = setTimeout(function () { expectInviteFrom = null; }, 20000);
+    } else if (p.type === 'follow') {
+      // Toggle the game's native party-follow on this member toward the leader.
+      try {
+        var pd = window.gui && window.gui.playerData && window.gui.playerData.partyData;
+        var party = pd && pd.getClassicalParty && pd.getClassicalParty();
+        if (party && party.partyId) {
+          send('PartyFollowThisMemberRequestMessage', {
+            partyId: party.partyId,
+            playerId: p.leaderId,
+            enabled: p.enabled !== false,
+          });
+        }
+      } catch (e) {}
+    } else if (p.type === 'ready') {
+      send('GameFightReadyMessage', { isReady: p.value !== false });
     }
   });
 

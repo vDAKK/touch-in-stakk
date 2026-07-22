@@ -14,6 +14,15 @@ $('close').onclick = () => window.touch.windowClose();
 $('add-tab').onclick = addAccount;
 $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
+$('follow-toggle').onclick = toggleFollow;
+
+// Grouped action: F2 readies every account currently in a fight.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'F2') {
+    e.preventDefault();
+    broadcastToAll({ type: 'ready', value: true });
+  }
+});
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => ($('settings-modal').hidden = true);
 $('save-settings').onclick = saveSettings;
@@ -137,6 +146,25 @@ function groupAuto() {
   if (!others.length) return;
   for (const a of others) sendToView(a.id, { type: 'expect-invite', from: leaderIdentity.name });
   sendToView(leader.id, { type: 'invite', names: others.map((a) => identities[a.id].name) });
+}
+
+function broadcastToAll(payload) {
+  for (const a of accounts) sendToView(a.id, payload);
+}
+
+// Toggle the game's native party-follow: every other account follows the active
+// account (the leader). Requires the accounts to already share a party.
+let following = false;
+function toggleFollow() {
+  const leader = accounts.find((a) => a.id === activeId);
+  if (!leader || !identities[leader.id]) return;
+  following = !following;
+  const leaderId = identities[leader.id].id;
+  for (const a of accounts) {
+    if (a.id === leader.id || !identities[a.id]) continue;
+    sendToView(a.id, { type: 'follow', leaderId, enabled: following });
+  }
+  $('follow-toggle').classList.toggle('on', following);
 }
 
 function pulseTab(id) {
