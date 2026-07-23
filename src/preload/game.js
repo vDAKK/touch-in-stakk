@@ -44,11 +44,11 @@ function gameHook() {
   }
 
   var ACTION_WINDOW = {
-    inventory: ['equipEntity', { tabId: 'heroInventory' }],
-    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
-    spells: ['equipEntity', { tabId: 'heroSpells' }],
+    inventory: ['equipEntity', { tabId: 'heroInventory', forceToOpen: true }],
+    character: ['equipEntity', { tabId: 'heroCharacteristics', forceToOpen: true }],
+    spells: ['equipEntity', { tabId: 'heroSpells', forceToOpen: true }],
     map: ['worldMap', undefined],
-    social: ['social', { tabId: 'friends' }],
+    social: ['social', { tabId: 'friends', forceToOpen: true }],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };
