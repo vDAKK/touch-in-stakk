@@ -65,13 +65,19 @@ function gameHook() {
     }
     var w = ACTION_WINDOW[action];
     if (!w) return;
-    var exists = wm.getWindow ? !!wm.getWindow(w[0]) : '?';
-    console.log('[qol-hook] open', w[0], JSON.stringify(w[1] || null), 'exists=', exists);
     try {
-      wm.open(w[0], w[1]);
-      console.log('[qol-hook] open done', w[0]);
+      var win = wm.getWindow(w[0]);
+      var isOpen = !!(win && win.openState);
+      console.log('[qol-hook]', w[0], 'openState=', isOpen);
+      if (isOpen) {
+        wm.close(w[0]); // toggle: same key closes an already-open window
+        console.log('[qol-hook] closed', w[0]);
+      } else {
+        wm.open(w[0], w[1]);
+        console.log('[qol-hook] opened', w[0]);
+      }
     } catch (e) {
-      console.log('[qol-hook] open ERR', w[0], e && e.message);
+      console.log('[qol-hook] ERR', w[0], e && e.message);
     }
   }
 
