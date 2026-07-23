@@ -43,14 +43,16 @@ function gameHook() {
     return null;
   }
 
+  // forceToOpen bypasses the game's uiLocker, which otherwise silently blocks
+  // some windows (e.g. equipEntity) from opening via a shortcut.
   var ACTION_WINDOW = {
-    inventory: ['equipEntity', { tabId: 'heroInventory' }],
-    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
-    spells: ['equipEntity', { tabId: 'heroSpells' }],
-    map: ['worldMap', undefined],
-    social: ['social', { tabId: 'friends' }],
-    options: ['options', undefined],
-    mount: ['mount', undefined],
+    inventory: ['equipEntity', { tabId: 'heroInventory', forceToOpen: true }],
+    character: ['equipEntity', { tabId: 'heroCharacteristics', forceToOpen: true }],
+    spells: ['equipEntity', { tabId: 'heroSpells', forceToOpen: true }],
+    map: ['worldMap', { forceToOpen: true }],
+    social: ['social', { tabId: 'friends', forceToOpen: true }],
+    options: ['options', { forceToOpen: true }],
+    mount: ['mount', { forceToOpen: true }],
   };
 
   function doAction(action) {
