@@ -44,37 +44,17 @@ function gameHook() {
   }
 
   var ACTION_WINDOW = {
-    inventory: ['equipEntity', { tabId: 'heroInventory', forceToOpen: true }],
-    character: ['equipEntity', { tabId: 'heroCharacteristics', forceToOpen: true }],
-    spells: ['equipEntity', { tabId: 'heroSpells', forceToOpen: true }],
+    inventory: ['equipEntity', { tabId: 'heroInventory' }],
+    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
+    spells: ['equipEntity', { tabId: 'heroSpells' }],
     map: ['worldMap', undefined],
-    social: ['social', { tabId: 'friends', forceToOpen: true }],
+    social: ['social', { tabId: 'friends' }],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };
 
-  // Some features are held locked (seen on beta) which stops their window's
-  // content from loading. Discover every active lock reason from the uiLocker
-  // and clear them all so the windows load normally.
-  function clearStaleLocks() {
-    try {
-      var lk = window.gui && window.gui.uiLocker;
-      if (!lk || !lk.lockStatus || !lk.unlockAllFeatures) return;
-      var reasons = {};
-      for (var fid in lk.lockStatus) {
-        var st = lk.lockStatus[fid];
-        for (var r in st) {
-          if (r !== 'base' && st[r]) reasons[r] = true;
-        }
-      }
-      var list = Object.keys(reasons);
-      console.log('[qol-hook] unlock reasons', JSON.stringify(list));
-      for (var i = 0; i < list.length; i++) {
-        try { lk.unlockAllFeatures(list[i]); } catch (e) {}
-      }
-    } catch (e) {}
-  }
-
+  // Open exactly the way the game's own menu button does (no forceToOpen — that
+  // opens the window shell but skips the content load), and close on re-press.
   function doAction(action) {
     var wm = windowsManager();
     if (!wm) return;
@@ -86,12 +66,8 @@ function gameHook() {
     if (!w) return;
     try {
       var win = wm.getWindow(w[0]);
-      if (win && win.openState) {
-        wm.close(w[0]); // toggle: same key closes an open window
-        return;
-      }
-      clearStaleLocks();
-      wm.open(w[0], w[1]);
+      if (win && win.openState) wm.close(w[0]);
+      else wm.open(w[0], w[1]);
     } catch (e) {}
   }
 
@@ -100,7 +76,6 @@ function gameHook() {
     if (!e.data || e.data.__qol !== 'cmd') return;
     var p = e.data.payload;
     if (!p) return;
-    console.log('[qol-hook] cmd received', JSON.stringify(p), 'wm=', !!windowsManager());
     if (p.type === 'invite' && p.names) {
       p.names.forEach(function (name) {
         send('PartyInvitationRequestMessage', { name: name });
@@ -231,7 +206,6 @@ ipcRenderer.on('bcast-mode', (_e, on) => {
 let keyToAction = {};
 ipcRenderer.on('keybinds', (_e, map) => {
   keyToAction = map || {};
-  console.log('[qol-preload] keybinds received', JSON.stringify(keyToAction));
 });
 
 function isTyping() {
@@ -256,7 +230,6 @@ window.addEventListener(
     }
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
     const action = plain ? keyToAction[e.key] : null;
-    console.log('[qol-preload] keydown', e.key, 'plain=', plain, 'action=', action);
     // A bound key triggers its game action on this (active) account, and mirrors
     // it to the other accounts when broadcast is on.
     if (action) {
