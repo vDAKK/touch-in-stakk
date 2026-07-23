@@ -65,10 +65,25 @@ function gameHook() {
     var w = ACTION_WINDOW[action];
     if (!w) return;
     try {
+      // Diagnostic for the hero windows that won't load their content.
+      if (w[0] === 'equipEntity') {
+        var lk = window.gui.uiLocker;
+        var tab = w[1] && w[1].tabId;
+        var info = {
+          lockedByWindow: lk && lk.isFeatureLockedByWindow ? lk.isFeatureLockedByWindow(w[0], tab) : '?',
+          featureLocked: lk && lk.isFeatureLocked ? lk.isFeatureLocked(tab) : '?',
+          heroAvail: (function () { try { return window.gui.playerData.heroData.isFeatureAvailable(); } catch (e) { return 'err:' + e.message; } })(),
+          winExists: !!wm.getWindow(w[0]),
+          openState: !!(wm.getWindow(w[0]) && wm.getWindow(w[0]).openState),
+        };
+        console.log('[qol-diag]', tab, JSON.stringify(info));
+      }
       var win = wm.getWindow(w[0]);
       if (win && win.openState) wm.close(w[0]);
       else wm.open(w[0], w[1]);
-    } catch (e) {}
+    } catch (e) {
+      console.log('[qol-diag] ERR', e && e.message);
+    }
   }
 
   // Commands from the renderer host (relayed by the preload as window messages).
