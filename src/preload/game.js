@@ -48,22 +48,31 @@ function gameHook() {
     character: ['equipEntity', { tabId: 'heroCharacteristics' }],
     spells: ['equipEntity', { tabId: 'heroSpells' }],
     map: ['worldMap', undefined],
-    social: ['social', undefined],
+    social: ['social', { tabId: 'friends' }],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };
 
   function doAction(action) {
     var wm = windowsManager();
-    if (!wm) return;
+    if (!wm) {
+      console.log('[qol-hook] doAction: no wm');
+      return;
+    }
+    if (action === 'close') {
+      try { wm.closeAll(); } catch (e) { console.log('[qol-hook] closeAll ERR', e && e.message); }
+      return;
+    }
+    var w = ACTION_WINDOW[action];
+    if (!w) return;
+    var exists = wm.getWindow ? !!wm.getWindow(w[0]) : '?';
+    console.log('[qol-hook] open', w[0], JSON.stringify(w[1] || null), 'exists=', exists);
     try {
-      if (action === 'close') {
-        wm.closeAll();
-        return;
-      }
-      var w = ACTION_WINDOW[action];
-      if (w) wm.open(w[0], w[1]);
-    } catch (e) {}
+      wm.open(w[0], w[1]);
+      console.log('[qol-hook] open done', w[0]);
+    } catch (e) {
+      console.log('[qol-hook] open ERR', w[0], e && e.message);
+    }
   }
 
   // Commands from the renderer host (relayed by the preload as window messages).
