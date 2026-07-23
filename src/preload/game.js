@@ -68,9 +68,10 @@ function gameHook() {
 
   // Commands from the renderer host (relayed by the preload as window messages).
   window.addEventListener('message', function (e) {
-    if (e.source !== window || !e.data || e.data.__qol !== 'cmd') return;
+    if (!e.data || e.data.__qol !== 'cmd') return;
     var p = e.data.payload;
     if (!p) return;
+    console.log('[qol-hook] cmd received', JSON.stringify(p), 'wm=', !!windowsManager());
     if (p.type === 'invite' && p.names) {
       p.names.forEach(function (name) {
         send('PartyInvitationRequestMessage', { name: name });
@@ -182,7 +183,7 @@ function injectLayoutFix() {
 
 // main-world hook -> renderer host
 window.addEventListener('message', (e) => {
-  if (e.source !== window || !e.data || e.data.__qol !== 'event') return;
+  if (!e.data || e.data.__qol !== 'event') return;
   ipcRenderer.sendToHost('qol', e.data.payload);
 });
 
@@ -201,6 +202,7 @@ ipcRenderer.on('bcast-mode', (_e, on) => {
 let keyToAction = {};
 ipcRenderer.on('keybinds', (_e, map) => {
   keyToAction = map || {};
+  console.log('[qol-preload] keybinds received', JSON.stringify(keyToAction));
 });
 
 function isTyping() {
@@ -225,6 +227,7 @@ window.addEventListener(
     }
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
     const action = plain ? keyToAction[e.key] : null;
+    console.log('[qol-preload] keydown', e.key, 'plain=', plain, 'action=', action);
     // A bound key triggers its game action on this (active) account, and mirrors
     // it to the other accounts when broadcast is on.
     if (action) {
