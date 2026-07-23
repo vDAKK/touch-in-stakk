@@ -53,12 +53,25 @@ function gameHook() {
     mount: ['mount', undefined],
   };
 
-  // Some windows are held by a stale "tutorial" lock (seen on beta); clearing it
-  // lets them open normally instead of force-opening into a broken state.
+  // Some features are held locked (seen on beta) which stops their window's
+  // content from loading. Discover every active lock reason from the uiLocker
+  // and clear them all so the windows load normally.
   function clearStaleLocks() {
     try {
       var lk = window.gui && window.gui.uiLocker;
-      if (lk && lk.unlockAllFeatures) lk.unlockAllFeatures('tutorial');
+      if (!lk || !lk.lockStatus || !lk.unlockAllFeatures) return;
+      var reasons = {};
+      for (var fid in lk.lockStatus) {
+        var st = lk.lockStatus[fid];
+        for (var r in st) {
+          if (r !== 'base' && st[r]) reasons[r] = true;
+        }
+      }
+      var list = Object.keys(reasons);
+      console.log('[qol-hook] unlock reasons', JSON.stringify(list));
+      for (var i = 0; i < list.length; i++) {
+        try { lk.unlockAllFeatures(list[i]); } catch (e) {}
+      }
     } catch (e) {}
   }
 
