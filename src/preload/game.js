@@ -43,44 +43,43 @@ function gameHook() {
     return null;
   }
 
-  // forceToOpen bypasses the game's uiLocker, which otherwise silently blocks
-  // some windows (e.g. equipEntity) from opening via a shortcut.
   var ACTION_WINDOW = {
-    inventory: ['equipEntity', { tabId: 'heroInventory', forceToOpen: true }],
-    character: ['equipEntity', { tabId: 'heroCharacteristics', forceToOpen: true }],
-    spells: ['equipEntity', { tabId: 'heroSpells', forceToOpen: true }],
-    map: ['worldMap', { forceToOpen: true }],
-    social: ['social', { tabId: 'friends', forceToOpen: true }],
-    options: ['options', { forceToOpen: true }],
-    mount: ['mount', { forceToOpen: true }],
+    inventory: ['equipEntity', { tabId: 'heroInventory' }],
+    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
+    spells: ['equipEntity', { tabId: 'heroSpells' }],
+    map: ['worldMap', undefined],
+    social: ['social', { tabId: 'friends' }],
+    options: ['options', undefined],
+    mount: ['mount', undefined],
   };
+
+  // Some windows are held by a stale "tutorial" lock (seen on beta); clearing it
+  // lets them open normally instead of force-opening into a broken state.
+  function clearStaleLocks() {
+    try {
+      var lk = window.gui && window.gui.uiLocker;
+      if (lk && lk.unlockAllFeatures) lk.unlockAllFeatures('tutorial');
+    } catch (e) {}
+  }
 
   function doAction(action) {
     var wm = windowsManager();
-    if (!wm) {
-      console.log('[qol-hook] doAction: no wm');
-      return;
-    }
+    if (!wm) return;
     if (action === 'close') {
-      try { wm.closeAll(); } catch (e) { console.log('[qol-hook] closeAll ERR', e && e.message); }
+      try { wm.closeAll(); } catch (e) {}
       return;
     }
     var w = ACTION_WINDOW[action];
     if (!w) return;
     try {
       var win = wm.getWindow(w[0]);
-      var isOpen = !!(win && win.openState);
-      console.log('[qol-hook]', w[0], 'openState=', isOpen);
-      if (isOpen) {
-        wm.close(w[0]); // toggle: same key closes an already-open window
-        console.log('[qol-hook] closed', w[0]);
-      } else {
-        wm.open(w[0], w[1]);
-        console.log('[qol-hook] opened', w[0]);
+      if (win && win.openState) {
+        wm.close(w[0]); // toggle: same key closes an open window
+        return;
       }
-    } catch (e) {
-      console.log('[qol-hook] ERR', w[0], e && e.message);
-    }
+      clearStaleLocks();
+      wm.open(w[0], w[1]);
+    } catch (e) {}
   }
 
   // Commands from the renderer host (relayed by the preload as window messages).
