@@ -161,7 +161,35 @@ function gameHook() {
     return out;
   }
 
+  // One-shot probe: reports which of the APIs the overlay/boxes rely on exist.
+  function diagOnce() {
+    if (diagOnce.done) return;
+    diagOnce.done = true;
+    try {
+      var mr = window.isoEngine && window.isoEngine.mapRenderer;
+      var fg = window.foreground;
+      var pick = function (o) {
+        if (!o) return null;
+        var out = [];
+        for (var k in o) { if (/convert|scene|screen|actorBox|updateActors|boxes/i.test(k)) out.push(k); }
+        return out;
+      };
+      console.log('[qol-diag] mr=' + !!mr +
+        ' getCellSceneCoordinate=' + !!(mr && typeof mr.getCellSceneCoordinate === 'function') +
+        ' interactiveElements=' + (mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1) +
+        ' identifiedElements=' + (mr && mr.identifiedElements ? Object.keys(mr.identifiedElements).length : -1) +
+        ' fg=' + !!fg +
+        ' fgMatch=' + JSON.stringify(pick(fg)) +
+        ' isoMatch=' + JSON.stringify(pick(window.isoEngine)));
+      if (mr && mr.interactiveElements) {
+        var k = Object.keys(mr.interactiveElements)[0];
+        if (k) console.log('[qol-diag] elemKeys=' + JSON.stringify(Object.keys(mr.interactiveElements[k])));
+      }
+    } catch (e) { console.log('[qol-diag] ERR ' + (e && e.message)); }
+  }
+
   function drawResourceOverlay() {
+    diagOnce();
     var mr = window.isoEngine && window.isoEngine.mapRenderer;
     var fg = window.foreground;
     if (!mr || !fg || typeof fg.convertSceneToScreen !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
@@ -268,6 +296,7 @@ function gameHook() {
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);
     if (showResources) setResourceOverlay(true);
+    setTimeout(diagOnce, 3000);
 
     // Report this account's character so the host can coordinate accounts.
     try {
@@ -327,6 +356,7 @@ function gameHook() {
     // Session counters: experience gained and net kamas since launch.
     gui.on('CharacterExperienceGainMessage', function (msg) {
       try {
+        console.log('[qol-diag] xpMsg ' + JSON.stringify(msg && Object.keys(msg)));
         if (msg && msg.experienceCharacter) {
           session.xp += msg.experienceCharacter;
           emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
@@ -335,6 +365,7 @@ function gameHook() {
     });
     gui.on('KamasUpdateMessage', function (msg) {
       try {
+        console.log('[qol-diag] kamasMsg ' + JSON.stringify(msg && Object.keys(msg)));
         var total = msg && (msg.kamasTotal != null ? msg.kamasTotal : msg.kamas);
         if (total == null) return;
         if (lastKamas != null) session.kamas += total - lastKamas;
