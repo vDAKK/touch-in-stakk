@@ -191,33 +191,45 @@ function gameHook() {
       }
       // Short, chunked output so it stays readable in the log file.
       function logChunks(tag, arr) {
-        for (var c = 0; c < arr.length; c += 6) {
-          console.log('[qol-p] ' + tag + c + '=' + JSON.stringify(arr.slice(c, c + 6)));
+        for (var c = 0; c < arr.length; c += 5) {
+          console.log('[qol-p] ' + tag + c + '=' + JSON.stringify(arr.slice(c, c + 5)));
         }
       }
+      // Resource collections, tracked over time (they fill in after map load).
       try {
-        var iso = window.isoEngine || {};
-        var isoC = [];
-        for (var ik in iso) {
-          var iv2 = iso[ik];
-          if (iv2 && typeof iv2 === 'object') {
-            var ic = Array.isArray(iv2) ? iv2.length : Object.keys(iv2).length;
-            if (ic > 0) isoC.push(ik + ':' + ic);
-          }
-        }
-        logChunks('iso', isoC);
+        var ieN = mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1;
+        var idN = mr && mr.identifiedElements ? Object.keys(mr.identifiedElements).length : -1;
+        var stN = mr && mr.statedElements ? Object.keys(mr.statedElements).length : -1;
+        console.log('[qol-p] res try=' + tries + ' ie=' + ieN + ' ident=' + idN + ' stated=' + stN);
       } catch (e) {}
+      // Anything whose text/attributes mention "entit" (the toggle's label).
+      try {
+        var hits = [];
+        var all = document.querySelectorAll('div,button,span,a');
+        for (var n = 0; n < all.length; n++) {
+          var el = all[n];
+          if (!el.offsetParent) continue; // visible only -> skips the login DOM
+          var blob = (el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || '') +
+            '|' + (el.getAttribute('title') || '') + '|' + (el.getAttribute('aria-label') || '');
+          if (/entit/i.test(blob)) hits.push(blob.slice(0, 40));
+        }
+        logChunks('ent', hits.slice(0, 10));
+      } catch (e) {}
+      // Visible HUD buttons only (login screen is hidden by then).
       try {
         var seen = {};
         var nodes = document.querySelectorAll('div,button,span,a');
-        for (var n = 0; n < nodes.length; n++) {
-          var c2 = nodes[n].className;
+        for (var m = 0; m < nodes.length; m++) {
+          var el2 = nodes[m];
+          if (!el2.offsetParent) continue;
+          var c2 = el2.className;
           if (c2 && c2.baseVal !== undefined) c2 = c2.baseVal;
           if (typeof c2 !== 'string' || !c2) continue;
           if (!/btn|button|icon|toggle/i.test(c2)) continue;
-          seen[c2.slice(0, 28)] = 1;
+          if (/splash|login|lang|forum|social|discord|beta|continue|playOther/i.test(c2)) continue;
+          seen[c2.slice(0, 26)] = 1;
         }
-        logChunks('btn', Object.keys(seen).slice(0, 36));
+        logChunks('btn', Object.keys(seen).slice(0, 30));
       } catch (e) {}
       var found = mr && mr.interactiveElements && Object.keys(mr.interactiveElements).length > 0;
       if (found || tries > 15) clearInterval(iv);
