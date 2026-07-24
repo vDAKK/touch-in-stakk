@@ -15,6 +15,7 @@ function gameHook() {
   var autoAccept = false;   // auto-accept trades/duels coming from those
   var session = { xp: 0, kamas: 0 };
   var lastKamas = null;
+  var noConfirm = false;
 
   function emit(payload) {
     try {
@@ -81,6 +82,35 @@ function gameHook() {
       if (!slot || (slot.isEmpty && slot.isEmpty()) || !slot.shortcut) return;
       var fighterId = slot.getFighterId ? slot.getFighterId() : window.gui.playerData.id;
       window.gui.emit('spellSlotSelected', fighterId, slot.shortcut.spellId);
+    } catch (e) {}
+  }
+
+  // The touch client asks to confirm a move or a spell cast (tap once to aim,
+  // again to confirm). On desktop that is just an extra click, so switch those
+  // options off: walking confirm is a bool, the cast ones use NEVER = 0.
+  var _opts = null;
+  function optionsStore() {
+    if (_opts) return _opts;
+    try {
+      var cache = window.singletons && window.singletons.c;
+      for (var k in cache) {
+        var ex = cache[k] && cache[k].exports;
+        if (ex && typeof ex === 'object' && 'confirmBoxWhenWalking' in ex) {
+          _opts = ex;
+          return _opts;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function applyNoConfirm(on) {
+    var o = optionsStore();
+    if (!o) return;
+    try {
+      o.confirmBoxWhenWalking = !on;
+      o.confirmBoxWhenClickCasting = on ? 0 : 1;
+      o.confirmBoxWhenDragCasting = on ? 0 : 1;
     } catch (e) {}
   }
 
@@ -162,6 +192,9 @@ function gameHook() {
       doAction(p.action);
     } else if (p.type === 'monsters') {
       emit({ type: 'monsters', groups: monsterGroups() });
+    } else if (p.type === 'no-confirm') {
+      noConfirm = !!p.on;
+      applyNoConfirm(noConfirm);
     } else if (p.type === 'own-accounts') {
       ownIds = {};
       (p.ids || []).forEach(function (id) { ownIds[id] = true; });
@@ -170,6 +203,8 @@ function gameHook() {
   });
 
   function onGuiReady(gui) {
+    if (noConfirm) applyNoConfirm(true);
+
     // Report this account's character so the host can coordinate accounts.
     try {
       var ci = gui.playerData && gui.playerData.characterBaseInformations;
