@@ -110,6 +110,10 @@ $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => ($('settings-modal').hidden = true);
 $('save-settings').onclick = saveSettings;
 $('capture-entities').onclick = startEntitiesCapture;
+$('open-devtools').onclick = () => {
+  const wv = activeId && document.getElementById(viewId(activeId));
+  if (wv && wv.openDevTools) wv.openDevTools();
+};
 
 // Ask the active account to record the next click as the entities toggle.
 function startEntitiesCapture() {
