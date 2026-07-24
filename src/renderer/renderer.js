@@ -17,9 +17,15 @@ const KEYBIND_ACTIONS = [
   { id: 'quests', label: 'Quêtes', defaultKey: 'q' },
   { id: 'jobs', label: 'Métiers', defaultKey: 'j' },
   { id: 'bestiary', label: 'Bestiaire', defaultKey: 'b' },
+  { id: 'achievements', label: 'Succès', defaultKey: 'y' },
   { id: 'map', label: 'Carte', defaultKey: 'm' },
   { id: 'social', label: 'Amis', defaultKey: 'f' },
   { id: 'guild', label: 'Guilde', defaultKey: 'g' },
+  { id: 'alliance', label: 'Alliance', defaultKey: 'a' },
+  { id: 'market', label: 'Hôtel de vente', defaultKey: 'h' },
+  { id: 'koliseum', label: 'Koliseum', defaultKey: 'k' },
+  { id: 'dailyQuest', label: 'Quêtes du jour', defaultKey: 'd' },
+  { id: 'groupSeeker', label: 'Recherche de groupe', defaultKey: 'r' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
   { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
@@ -42,6 +48,8 @@ $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
 $('follow-toggle').onclick = toggleFollow;
 $('broadcast-toggle').onclick = toggleBroadcast;
+$('monsters-btn').onclick = toggleMonsters;
+$('monsters-close').onclick = () => ($('monsters-panel').hidden = true);
 
 // Launcher hotkeys while the chrome (not a game webview) has focus. When a game
 // webview has focus its preload forwards the same shortcuts over the 'hotkey'
@@ -221,6 +229,8 @@ function handleQol(accountId, msg) {
       if (settings.notifications) beep();
     }
     pulseTab(accountId);
+  } else if (msg.type === 'monsters') {
+    renderMonsters(msg.groups || []);
   } else if (msg.type === 'whisper') {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
   } else if (msg.type === 'disconnected') {
@@ -271,6 +281,45 @@ async function autoNameTab(accountId, charName) {
   a.name = charName;
   renderTabs();
   await window.touch.accountsRename(accountId, charName);
+}
+
+// Ask the active account for the monster groups on its current map.
+function toggleMonsters() {
+  const panel = $('monsters-panel');
+  if (!panel.hidden) {
+    panel.hidden = true;
+    return;
+  }
+  $('monsters-list').innerHTML = '<div class="mg-empty">Lecture de la carte…</div>';
+  panel.hidden = false;
+  if (activeId) sendToView(activeId, { type: 'monsters' });
+}
+
+function renderMonsters(groups) {
+  const box = $('monsters-list');
+  box.innerHTML = '';
+  if (!groups.length) {
+    box.innerHTML = '<div class="mg-empty">Aucun groupe sur cette carte.</div>';
+    return;
+  }
+  for (const g of groups) {
+    const row = document.createElement('div');
+    row.className = 'mg';
+    const top = document.createElement('div');
+    top.className = 'mg-top';
+    const lvl = document.createElement('span');
+    lvl.className = 'mg-lvl';
+    lvl.textContent = 'Niv. ' + g.level;
+    const count = document.createElement('span');
+    count.className = 'mg-count';
+    count.textContent = g.count + (g.count > 1 ? ' monstres' : ' monstre');
+    top.append(lvl, count);
+    const names = document.createElement('div');
+    names.className = 'mg-names';
+    names.textContent = (g.names || []).join(', ');
+    row.append(top, names);
+    box.appendChild(row);
+  }
 }
 
 function sendToView(accountId, payload) {

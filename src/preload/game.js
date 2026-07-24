@@ -53,9 +53,15 @@ function gameHook() {
     quests: ['grimoire', { tabId: 'quests' }],
     jobs: ['grimoire', { tabId: 'jobs' }],
     bestiary: ['grimoire', { tabId: 'bestiary' }],
+    achievements: ['grimoire', { tabId: 'achievements' }],
     map: ['worldMap', undefined],
     social: ['social', { tabId: 'friends' }],
     guild: ['social', { tabId: 'guild' }],
+    alliance: ['social', { tabId: 'alliance' }],
+    market: ['market', { tabId: 'shop' }],
+    koliseum: ['arena', undefined],
+    dailyQuest: ['dailyQuest', undefined],
+    groupSeeker: ['groupSeeker', undefined],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };
@@ -72,6 +78,30 @@ function gameHook() {
       var fighterId = slot.getFighterId ? slot.getFighterId() : window.gui.playerData.id;
       window.gui.emit('spellSlotSelected', fighterId, slot.shortcut.spellId);
     } catch (e) {}
+  }
+
+  // Monster groups standing on the current map, with their level and makeup.
+  function monsterGroups() {
+    var out = [];
+    try {
+      var actors = window.actorManager && window.actorManager.actors;
+      var db = (window.gui.databases && window.gui.databases.Monsters) || {};
+      for (var id in actors) {
+        if (!Object.prototype.hasOwnProperty.call(actors, id)) continue;
+        var a = actors[id];
+        var si = a && a.data && a.data.staticInfos;
+        if (!si || !si.mainCreatureLightInfos) continue;
+        var list = [si.mainCreatureLightInfos].concat(si.underlings || []);
+        var names = list.map(function (m) {
+          var rec = db[m.creatureGenericId];
+          return (rec && (rec.nameId || rec.name)) || '#' + m.creatureGenericId;
+        });
+        var level = si.level || list.reduce(function (s, m) { return s + (m.level || 0); }, 0);
+        out.push({ level: level, count: list.length, names: names });
+      }
+    } catch (e) {}
+    out.sort(function (x, y) { return y.level - x.level; });
+    return out;
   }
 
   function doAction(action) {
@@ -126,6 +156,8 @@ function gameHook() {
       send('GameFightReadyMessage', { isReady: p.value !== false });
     } else if (p.type === 'action') {
       doAction(p.action);
+    } else if (p.type === 'monsters') {
+      emit({ type: 'monsters', groups: monsterGroups() });
     }
   });
 
