@@ -49,8 +49,6 @@ $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
 $('follow-toggle').onclick = toggleFollow;
 $('broadcast-toggle').onclick = toggleBroadcast;
-$('monsters-btn').onclick = toggleMonsters;
-$('monsters-close').onclick = () => ($('monsters-panel').hidden = true);
 $('stats-btn').onclick = toggleStats;
 $('stats-close').onclick = () => ($('stats-panel').hidden = true);
 
@@ -237,8 +235,6 @@ function handleQol(accountId, msg) {
       if (settings.notifications) beep();
     }
     pulseTab(accountId);
-  } else if (msg.type === 'monsters') {
-    renderMonsters(msg.groups || []);
   } else if (msg.type === 'whisper') {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
   } else if (msg.type === 'disconnected') {
@@ -311,7 +307,7 @@ function renderStats() {
   const box = $('stats-list');
   box.innerHTML = '';
   if (!accounts.length) {
-    box.innerHTML = '<div class="mg-empty">Aucun compte.</div>';
+    box.innerHTML = '<div class="panel-empty">Aucun compte.</div>';
     return;
   }
   for (const a of accounts) {
@@ -331,45 +327,6 @@ function renderStats() {
     km.textContent = (s.kamas >= 0 ? '+' : '') + fmt(s.kamas) + ' K';
     vals.append(xp, km);
     row.append(name, vals);
-    box.appendChild(row);
-  }
-}
-
-// Ask the active account for the monster groups on its current map.
-function toggleMonsters() {
-  const panel = $('monsters-panel');
-  if (!panel.hidden) {
-    panel.hidden = true;
-    return;
-  }
-  $('monsters-list').innerHTML = '<div class="mg-empty">Lecture de la carte…</div>';
-  panel.hidden = false;
-  if (activeId) sendToView(activeId, { type: 'monsters' });
-}
-
-function renderMonsters(groups) {
-  const box = $('monsters-list');
-  box.innerHTML = '';
-  if (!groups.length) {
-    box.innerHTML = '<div class="mg-empty">Aucun groupe sur cette carte.</div>';
-    return;
-  }
-  for (const g of groups) {
-    const row = document.createElement('div');
-    row.className = 'mg';
-    const top = document.createElement('div');
-    top.className = 'mg-top';
-    const lvl = document.createElement('span');
-    lvl.className = 'mg-lvl';
-    lvl.textContent = 'Niv. ' + g.level;
-    const count = document.createElement('span');
-    count.className = 'mg-count';
-    count.textContent = g.count + (g.count > 1 ? ' monstres' : ' monstre');
-    top.append(lvl, count);
-    const names = document.createElement('div');
-    names.className = 'mg-names';
-    names.textContent = (g.names || []).join(', ');
-    row.append(top, names);
     box.appendChild(row);
   }
 }

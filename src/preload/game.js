@@ -71,8 +71,6 @@ function gameHook() {
     mount: ['mount', undefined],
   };
 
-  // Open exactly the way the game's own menu button does (no forceToOpen — that
-  // opens the window shell but skips the content load), and close on re-press.
   // Select the spell in shortcut-bar slot `index` exactly as tapping it does:
   // the game then casts it on the next map tap.
   function selectSpellSlot(index) {
@@ -114,30 +112,8 @@ function gameHook() {
     } catch (e) {}
   }
 
-  // Monster groups standing on the current map, with their level and makeup.
-  function monsterGroups() {
-    var out = [];
-    try {
-      var actors = window.actorManager && window.actorManager.actors;
-      var db = (window.gui.databases && window.gui.databases.Monsters) || {};
-      for (var id in actors) {
-        if (!Object.prototype.hasOwnProperty.call(actors, id)) continue;
-        var a = actors[id];
-        var si = a && a.data && a.data.staticInfos;
-        if (!si || !si.mainCreatureLightInfos) continue;
-        var list = [si.mainCreatureLightInfos].concat(si.underlings || []);
-        var names = list.map(function (m) {
-          var rec = db[m.creatureGenericId];
-          return (rec && (rec.nameId || rec.name)) || '#' + m.creatureGenericId;
-        });
-        var level = si.level || list.reduce(function (s, m) { return s + (m.level || 0); }, 0);
-        out.push({ level: level, count: list.length, names: names });
-      }
-    } catch (e) {}
-    out.sort(function (x, y) { return y.level - x.level; });
-    return out;
-  }
-
+  // Open the window the same way the game's menu button does (no forceToOpen —
+  // that opens the shell but skips the content load); re-press closes it.
   function doAction(action) {
     var spell = /^spell(\d+)$/.exec(action);
     if (spell) {
@@ -190,8 +166,6 @@ function gameHook() {
       send('GameFightReadyMessage', { isReady: p.value !== false });
     } else if (p.type === 'action') {
       doAction(p.action);
-    } else if (p.type === 'monsters') {
-      emit({ type: 'monsters', groups: monsterGroups() });
     } else if (p.type === 'no-confirm') {
       noConfirm = !!p.on;
       applyNoConfirm(noConfirm);
