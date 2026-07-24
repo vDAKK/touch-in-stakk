@@ -189,18 +189,32 @@ function gameHook() {
         console.log('[qol-diag] fgConv=' + JSON.stringify(pick) +
           ' elemKeys=' + JSON.stringify(key ? Object.keys(mr.interactiveElements[key]) : null));
       }
-      // Candidates for the HUD "afficher les entités" toggle, by class/tooltip.
+      // Where do the map's interactive elements actually live?
       try {
-        var cands = [];
-        var nodes = document.querySelectorAll('div,button,span');
+        if (mr) {
+          var counts = {};
+          for (var mk in mr) {
+            var v = mr[mk];
+            if (v && typeof v === 'object') {
+              var n2 = Array.isArray(v) ? v.length : Object.keys(v).length;
+              if (n2 > 0) counts[mk] = n2;
+            }
+          }
+          console.log('[qol-diag] mrCollections=' + JSON.stringify(counts).slice(0, 700));
+        }
+      } catch (e) {}
+      // Distinct HUD button classes, to locate the "show entities" toggle.
+      try {
+        var seen = {};
+        var nodes = document.querySelectorAll('div,button,span,a');
         for (var n = 0; n < nodes.length; n++) {
-          var el = nodes[n];
-          var c = el.className;
+          var c = nodes[n].className;
           if (c && c.baseVal !== undefined) c = c.baseVal;
           if (typeof c !== 'string' || !c) continue;
-          if (/entit|eye|reveal|showAll|display/i.test(c)) cands.push(c.slice(0, 60));
+          if (!/btn|button|icon|toggle/i.test(c)) continue;
+          seen[c.slice(0, 50)] = 1;
         }
-        console.log('[qol-diag] entityBtnCandidates=' + JSON.stringify(cands.slice(0, 20)));
+        console.log('[qol-diag] hudBtnClasses=' + JSON.stringify(Object.keys(seen).slice(0, 40)));
       } catch (e) {}
       if (mr || tries > 10) clearInterval(iv);
     }, 3000);
@@ -247,14 +261,14 @@ function gameHook() {
     diagOnce();
     var mr = window.isoEngine && window.isoEngine.mapRenderer;
     var fg = window.foreground;
-    if (!mr || !fg || typeof fg.convertSceneToScreen !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
+    if (!mr || !fg || typeof fg.convertSceneToScreenCoordinate !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
     var root = overlayRoot();
     root.innerHTML = '';
     resourcePoints().forEach(function (p) {
       try {
         var sc = mr.getCellSceneCoordinate(p.cell);
         if (!sc) return;
-        var s = fg.convertSceneToScreen(sc.x, sc.y);
+        var s = fg.convertSceneToScreenCoordinate(sc.x, sc.y);
         if (!s || s.x == null) return;
         var tag = document.createElement('div');
         tag.textContent = p.name || '•';
