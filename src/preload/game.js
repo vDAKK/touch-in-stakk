@@ -189,32 +189,35 @@ function gameHook() {
         console.log('[qol-diag] fgConv=' + JSON.stringify(pick) +
           ' elemKeys=' + JSON.stringify(key ? Object.keys(mr.interactiveElements[key]) : null));
       }
-      // Where do the map's interactive elements actually live?
-      try {
-        if (mr) {
-          var counts = {};
-          for (var mk in mr) {
-            var v = mr[mk];
-            if (v && typeof v === 'object') {
-              var n2 = Array.isArray(v) ? v.length : Object.keys(v).length;
-              if (n2 > 0) counts[mk] = n2;
-            }
-          }
-          console.log('[qol-diag] mrCollections=' + JSON.stringify(counts).slice(0, 700));
+      // Short, chunked output so it stays readable in the log file.
+      function logChunks(tag, arr) {
+        for (var c = 0; c < arr.length; c += 6) {
+          console.log('[qol-p] ' + tag + c + '=' + JSON.stringify(arr.slice(c, c + 6)));
         }
+      }
+      try {
+        var iso = window.isoEngine || {};
+        var isoC = [];
+        for (var ik in iso) {
+          var iv2 = iso[ik];
+          if (iv2 && typeof iv2 === 'object') {
+            var ic = Array.isArray(iv2) ? iv2.length : Object.keys(iv2).length;
+            if (ic > 0) isoC.push(ik + ':' + ic);
+          }
+        }
+        logChunks('iso', isoC);
       } catch (e) {}
-      // Distinct HUD button classes, to locate the "show entities" toggle.
       try {
         var seen = {};
         var nodes = document.querySelectorAll('div,button,span,a');
         for (var n = 0; n < nodes.length; n++) {
-          var c = nodes[n].className;
-          if (c && c.baseVal !== undefined) c = c.baseVal;
-          if (typeof c !== 'string' || !c) continue;
-          if (!/btn|button|icon|toggle/i.test(c)) continue;
-          seen[c.slice(0, 50)] = 1;
+          var c2 = nodes[n].className;
+          if (c2 && c2.baseVal !== undefined) c2 = c2.baseVal;
+          if (typeof c2 !== 'string' || !c2) continue;
+          if (!/btn|button|icon|toggle/i.test(c2)) continue;
+          seen[c2.slice(0, 28)] = 1;
         }
-        console.log('[qol-diag] hudBtnClasses=' + JSON.stringify(Object.keys(seen).slice(0, 40)));
+        logChunks('btn', Object.keys(seen).slice(0, 36));
       } catch (e) {}
       var found = mr && mr.interactiveElements && Object.keys(mr.interactiveElements).length > 0;
       if (found || tries > 15) clearInterval(iv);
