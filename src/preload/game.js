@@ -161,89 +161,38 @@ function gameHook() {
     return out;
   }
 
-  // Probe: retries until the map engine shows up, and reports the real global
-  // names so the overlay can bind to whatever this build exposes.
-  function diagOnce() {
-    if (diagOnce.started) return;
-    diagOnce.started = true;
-    var tries = 0;
-    var iv = setInterval(function () {
-      tries += 1;
-      var globals = [];
-      try {
-        for (var k in window) {
-          if (/iso|foreground|mapRender|scene/i.test(k)) globals.push(k);
-        }
-      } catch (e) {}
-      var mr = window.isoEngine && window.isoEngine.mapRenderer;
-      console.log('[qol-diag] try=' + tries +
-        ' iso=' + typeof window.isoEngine +
-        ' fg=' + typeof window.foreground +
-        ' mr=' + !!mr +
-        ' ie=' + (mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1) +
-        ' globals=' + JSON.stringify(globals.slice(0, 25)));
-      if (mr) {
-        var pick = [];
-        for (var f in window.foreground || {}) { if (/convert|scene|screen/i.test(f)) pick.push(f); }
-        var key = Object.keys(mr.interactiveElements || {})[0];
-        console.log('[qol-diag] fgConv=' + JSON.stringify(pick) +
-          ' elemKeys=' + JSON.stringify(key ? Object.keys(mr.interactiveElements[key]) : null));
-      }
-      // Short, chunked output so it stays readable in the log file.
-      function logChunks(tag, arr) {
-        for (var c = 0; c < arr.length; c += 5) {
-          console.log('[qol-p] ' + tag + c + '=' + JSON.stringify(arr.slice(c, c + 5)));
-        }
-      }
-      // Resource collections, tracked over time (they fill in after map load).
-      try {
-        var ieN = mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1;
-        var idN = mr && mr.identifiedElements ? Object.keys(mr.identifiedElements).length : -1;
-        var stN = mr && mr.statedElements ? Object.keys(mr.statedElements).length : -1;
-        console.log('[qol-p] res try=' + tries + ' ie=' + ieN + ' ident=' + idN + ' stated=' + stN);
-      } catch (e) {}
-      // Anything whose text/attributes mention "entit" (the toggle's label).
-      try {
-        var hits = [];
-        var all = document.querySelectorAll('div,button,span,a');
-        for (var n = 0; n < all.length; n++) {
-          var el = all[n];
-          if (!el.offsetParent) continue; // visible only -> skips the login DOM
-          var blob = (el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || '') +
-            '|' + (el.getAttribute('title') || '') + '|' + (el.getAttribute('aria-label') || '');
-          if (/entit/i.test(blob)) hits.push(blob.slice(0, 40));
-        }
-        logChunks('ent', hits.slice(0, 10));
-      } catch (e) {}
-      // Visible HUD buttons only (login screen is hidden by then).
-      try {
-        var seen = {};
-        var nodes = document.querySelectorAll('div,button,span,a');
-        for (var m = 0; m < nodes.length; m++) {
-          var el2 = nodes[m];
-          if (!el2.offsetParent) continue;
-          var c2 = el2.className;
-          if (c2 && c2.baseVal !== undefined) c2 = c2.baseVal;
-          if (typeof c2 !== 'string' || !c2) continue;
-          if (!/btn|button|icon|toggle/i.test(c2)) continue;
-          if (/splash|login|lang|forum|social|discord|beta|continue|playOther/i.test(c2)) continue;
-          seen[c2.slice(0, 26)] = 1;
-        }
-        logChunks('btn', Object.keys(seen).slice(0, 30));
-      } catch (e) {}
-      var found = mr && mr.interactiveElements && Object.keys(mr.interactiveElements).length > 0;
-      if (found || tries > 15) clearInterval(iv);
-    }, 3000);
-  }
-
   // Click the game's own "show entities" HUD toggle (the one that pops the
   // monster group boxes). Located in the DOM because its label lives in the
   // language files, not the script bundle.
+  var entitiesSelector = null;
+
+  function cssPathOf(el) {
+    // Build a short, stable selector from the element's own classes.
+    var c = el.className;
+    if (c && c.baseVal !== undefined) c = c.baseVal;
+    if (typeof c === 'string' && c.trim()) {
+      return el.tagName.toLowerCase() + '.' + c.trim().split(/\s+/).join('.');
+    }
+    return null;
+  }
+
+  // One-shot: the next click in the game records its target as the toggle.
+  function captureEntitiesButton() {
+    var onClick = function (ev) {
+      document.removeEventListener('click', onClick, true);
+      var sel = cssPathOf(ev.target) || (ev.target.parentElement && cssPathOf(ev.target.parentElement));
+      if (sel) {
+        entitiesSelector = sel;
+        emit({ type: 'entities-selector', selector: sel });
+      }
+    };
+    document.addEventListener('click', onClick, true);
+  }
+
   function clickEntitiesToggle() {
     try {
-      var el =
-        document.querySelector('[class*="showEntities" i]') ||
-        document.querySelector('[class*="entit" i]');
+      if (!entitiesSelector) return false;
+      var el = document.querySelector(entitiesSelector);
       if (!el) return false;
       ['mousedown', 'mouseup', 'click'].forEach(function (t) {
         el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
@@ -274,7 +223,6 @@ function gameHook() {
   }
 
   function drawResourceOverlay() {
-    diagOnce();
     var mr = window.isoEngine && window.isoEngine.mapRenderer;
     var fg = window.foreground;
     if (!mr || !fg || typeof fg.convertSceneToScreenCoordinate !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
@@ -369,6 +317,10 @@ function gameHook() {
       send('GameFightReadyMessage', { isReady: p.value !== false });
     } else if (p.type === 'action') {
       doAction(p.action);
+    } else if (p.type === 'capture-entities') {
+      captureEntitiesButton();
+    } else if (p.type === 'entities-selector') {
+      entitiesSelector = p.selector || null;
     } else if (p.type === 'resource-overlay') {
       showResources = !!p.on;
       setResourceOverlay(showResources);
@@ -385,7 +337,6 @@ function gameHook() {
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);
     if (showResources) setResourceOverlay(true);
-    diagOnce();
     readGains();
     setInterval(readGains, 4000);
 

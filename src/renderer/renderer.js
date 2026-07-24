@@ -109,6 +109,15 @@ async function reorder(draggedId, targetId) {
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => ($('settings-modal').hidden = true);
 $('save-settings').onclick = saveSettings;
+$('capture-entities').onclick = startEntitiesCapture;
+
+// Ask the active account to record the next click as the entities toggle.
+function startEntitiesCapture() {
+  if (!activeId) return;
+  $('capture-entities').textContent = 'Clique le bouton en jeu…';
+  $('settings-modal').hidden = true;
+  sendToView(activeId, { type: 'capture-entities' });
+}
 $('retry').onclick = retryPatch;
 
 const viewId = (id) => 'view-' + id;
@@ -152,6 +161,7 @@ async function createView(account) {
     wv.send('keybinds', computeKeyToAction());
     wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
     wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
+    if (settings.entitiesSelector) wv.send('qol', { type: 'entities-selector', selector: settings.entitiesSelector });
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
@@ -227,6 +237,12 @@ function handleQol(accountId, msg) {
     identities[accountId] = { name: msg.name, id: msg.id };
     autoNameTab(accountId, msg.name);
     pushOwnAccounts();
+  } else if (msg.type === 'entities-selector') {
+    settings.entitiesSelector = msg.selector;
+    window.touch.setSettings({ entitiesSelector: msg.selector }).then(() => {
+      broadcastToAll({ type: 'entities-selector', selector: msg.selector });
+    });
+    $('capture-entities').textContent = 'Capturer';
   } else if (msg.type === 'stats') {
     sessionStats[accountId] = { xp: msg.xp || 0, kamas: msg.kamas || 0 };
     if (!$('stats-panel').hidden) renderStats();
@@ -561,6 +577,7 @@ async function saveSettings() {
     noConfirm: $('no-confirm').checked,
     showResources: $('show-resources').checked,
     autoAcceptOwn: $('auto-accept-own').checked,
+    entitiesSelector: settings.entitiesSelector || null,
     keybinds: editingKeybinds,
   });
   for (const a of accounts) {
