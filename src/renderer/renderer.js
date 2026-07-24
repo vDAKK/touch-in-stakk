@@ -23,6 +23,14 @@ const KEYBIND_ACTIONS = [
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
   { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
+  { id: 'spell1', label: 'Sort 1', defaultKey: '1' },
+  { id: 'spell2', label: 'Sort 2', defaultKey: '2' },
+  { id: 'spell3', label: 'Sort 3', defaultKey: '3' },
+  { id: 'spell4', label: 'Sort 4', defaultKey: '4' },
+  { id: 'spell5', label: 'Sort 5', defaultKey: '5' },
+  { id: 'spell6', label: 'Sort 6', defaultKey: '6' },
+  { id: 'spell7', label: 'Sort 7', defaultKey: '7' },
+  { id: 'spell8', label: 'Sort 8', defaultKey: '8' },
 ];
 
 $('min').onclick = () => window.touch.windowMinimize();

@@ -62,7 +62,24 @@ function gameHook() {
 
   // Open exactly the way the game's own menu button does (no forceToOpen — that
   // opens the window shell but skips the content load), and close on re-press.
+  // Select the spell in shortcut-bar slot `index` exactly as tapping it does:
+  // the game then casts it on the next map tap.
+  function selectSpellSlot(index) {
+    try {
+      var bar = window.gui.shortcutBars && window.gui.shortcutBars.playerBar;
+      var slot = bar && bar.getSpellSlotByIndex ? bar.getSpellSlotByIndex(index) : null;
+      if (!slot || (slot.isEmpty && slot.isEmpty()) || !slot.shortcut) return;
+      var fighterId = slot.getFighterId ? slot.getFighterId() : window.gui.playerData.id;
+      window.gui.emit('spellSlotSelected', fighterId, slot.shortcut.spellId);
+    } catch (e) {}
+  }
+
   function doAction(action) {
+    var spell = /^spell(\d+)$/.exec(action);
+    if (spell) {
+      selectSpellSlot(Number(spell[1]) - 1);
+      return;
+    }
     var wm = windowsManager();
     if (!wm) return;
     if (action === 'close') {
