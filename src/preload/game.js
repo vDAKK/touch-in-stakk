@@ -216,7 +216,8 @@ function gameHook() {
         }
         console.log('[qol-diag] hudBtnClasses=' + JSON.stringify(Object.keys(seen).slice(0, 40)));
       } catch (e) {}
-      if (mr || tries > 10) clearInterval(iv);
+      var found = mr && mr.interactiveElements && Object.keys(mr.interactiveElements).length > 0;
+      if (found || tries > 15) clearInterval(iv);
     }, 3000);
   }
 
