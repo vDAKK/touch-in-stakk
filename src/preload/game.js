@@ -16,6 +16,7 @@ function gameHook() {
   var session = { xp: 0, kamas: 0 };
   var lastKamas = null;
   var noConfirm = false;
+  var showResources = false;
 
   function emit(payload) {
     try {
@@ -112,6 +113,91 @@ function gameHook() {
     } catch (e) {}
   }
 
+  // --- Resource overlay -----------------------------------------------------
+  // Labels every interactive element (resource) of the map, kept in place by
+  // re-projecting its cell through the game's own scene->screen conversion.
+  var resOverlay = { on: false, root: null, timer: null, sampled: false };
+
+  function overlayRoot() {
+    if (resOverlay.root && resOverlay.root.isConnected) return resOverlay.root;
+    var d = document.createElement('div');
+    d.id = 'qol-res-overlay';
+    d.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9998;';
+    document.body.appendChild(d);
+    resOverlay.root = d;
+    return d;
+  }
+
+  function resourcePoints() {
+    var out = [];
+    try {
+      var mr = window.isoEngine && window.isoEngine.mapRenderer;
+      if (!mr) return out;
+      var els = mr.interactiveElements || {};
+      var ident = mr.identifiedElements || {};
+      for (var id in els) {
+        var el = els[id];
+        if (!el) continue;
+        var idn = ident[id];
+        var cell = el.elementCellId;
+        if (cell == null) cell = el.cellId;
+        if (cell == null && idn) cell = idn.elementCellId != null ? idn.elementCellId : idn.cellId;
+        if (cell == null) continue;
+        var name = '';
+        try {
+          var sk = el.enabledSkills && el.enabledSkills[0];
+          name = (sk && (sk.nameId || sk.name)) || '';
+        } catch (e) {}
+        out.push({ cell: cell, name: name });
+      }
+      if (!resOverlay.sampled) {
+        resOverlay.sampled = true;
+        var k = Object.keys(els)[0];
+        console.log('[qol-res] elements=' + Object.keys(els).length +
+          ' sampleKeys=' + JSON.stringify(k ? Object.keys(els[k]) : null) +
+          ' resolved=' + out.length);
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  function drawResourceOverlay() {
+    var mr = window.isoEngine && window.isoEngine.mapRenderer;
+    var fg = window.foreground;
+    if (!mr || !fg || typeof fg.convertSceneToScreen !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
+    var root = overlayRoot();
+    root.innerHTML = '';
+    resourcePoints().forEach(function (p) {
+      try {
+        var sc = mr.getCellSceneCoordinate(p.cell);
+        if (!sc) return;
+        var s = fg.convertSceneToScreen(sc.x, sc.y);
+        if (!s || s.x == null) return;
+        var tag = document.createElement('div');
+        tag.textContent = p.name || '•';
+        tag.style.cssText =
+          'position:absolute;transform:translate(-50%,-100%);left:' + s.x + 'px;top:' + s.y +
+          'px;background:rgba(14,18,22,.82);color:#2fd08a;font:11px/1.4 system-ui,sans-serif;' +
+          'padding:1px 5px;border-radius:4px;white-space:nowrap;';
+        root.appendChild(tag);
+      } catch (e) {}
+    });
+  }
+
+  function setResourceOverlay(on) {
+    resOverlay.on = !!on;
+    if (resOverlay.timer) {
+      clearInterval(resOverlay.timer);
+      resOverlay.timer = null;
+    }
+    if (!resOverlay.on) {
+      if (resOverlay.root) resOverlay.root.innerHTML = '';
+      return;
+    }
+    drawResourceOverlay();
+    resOverlay.timer = setInterval(drawResourceOverlay, 300);
+  }
+
   // Open the window the same way the game's menu button does (no forceToOpen —
   // that opens the shell but skips the content load); re-press closes it.
   function doAction(action) {
@@ -166,6 +252,9 @@ function gameHook() {
       send('GameFightReadyMessage', { isReady: p.value !== false });
     } else if (p.type === 'action') {
       doAction(p.action);
+    } else if (p.type === 'resource-overlay') {
+      showResources = !!p.on;
+      setResourceOverlay(showResources);
     } else if (p.type === 'no-confirm') {
       noConfirm = !!p.on;
       applyNoConfirm(noConfirm);
@@ -178,6 +267,7 @@ function gameHook() {
 
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);
+    if (showResources) setResourceOverlay(true);
 
     // Report this account's character so the host can coordinate accounts.
     try {

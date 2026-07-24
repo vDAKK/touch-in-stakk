@@ -150,6 +150,7 @@ async function createView(account) {
     if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
     wv.send('keybinds', computeKeyToAction());
     wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
+    wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
@@ -541,6 +542,7 @@ async function openSettings() {
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
   $('no-confirm').checked = s.noConfirm;
+  $('show-resources').checked = s.showResources;
   $('auto-accept-own').checked = s.autoAcceptOwn;
   editingKeybinds = { ...(s.keybinds || {}) };
   capturingAction = null;
@@ -556,6 +558,7 @@ async function saveSettings() {
     switchOnTurn: $('switch-on-turn').checked,
     notifications: $('notifications').checked,
     noConfirm: $('no-confirm').checked,
+    showResources: $('show-resources').checked,
     autoAcceptOwn: $('auto-accept-own').checked,
     keybinds: editingKeybinds,
   });
@@ -566,6 +569,7 @@ async function saveSettings() {
   pushKeybinds();
   pushOwnAccounts();
   broadcastToAll({ type: 'no-confirm', on: !!settings.noConfirm });
+  broadcastToAll({ type: 'resource-overlay', on: !!settings.showResources });
   $('settings-modal').hidden = true;
 }
 
