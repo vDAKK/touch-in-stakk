@@ -11,6 +11,10 @@ const { ipcRenderer } = require('electron');
 function gameHook() {
   var expectInviteFrom = null;
   var expectTimer = null;
+  var ownIds = {};          // character ids of the user's other accounts
+  var autoAccept = false;   // auto-accept trades/duels coming from those
+  var session = { xp: 0, kamas: 0 };
+  var lastKamas = null;
 
   function emit(payload) {
     try {
@@ -158,6 +162,10 @@ function gameHook() {
       doAction(p.action);
     } else if (p.type === 'monsters') {
       emit({ type: 'monsters', groups: monsterGroups() });
+    } else if (p.type === 'own-accounts') {
+      ownIds = {};
+      (p.ids || []).forEach(function (id) { ownIds[id] = true; });
+      autoAccept = !!p.autoAccept;
     }
   });
 
@@ -199,6 +207,41 @@ function gameHook() {
     // This account lost its connection to the game server.
     gui.on('disconnect', function () {
       emit({ type: 'disconnected' });
+    });
+
+    // Auto-accept a trade coming from one of the user's own accounts.
+    gui.on('ExchangeRequestedTradeMessage', function (msg) {
+      try {
+        if (autoAccept && msg && ownIds[msg.source]) send('ExchangeAcceptMessage', {});
+      } catch (e) {}
+    });
+
+    // Same for a friendly duel request from one of the user's own accounts.
+    gui.on('GameRolePlayPlayerFightFriendlyRequestedMessage', function (msg) {
+      try {
+        if (autoAccept && msg && ownIds[msg.sourceId]) {
+          send('GameRolePlayPlayerFightFriendlyAnswerMessage', { fightId: msg.fightId, accept: true });
+        }
+      } catch (e) {}
+    });
+
+    // Session counters: experience gained and net kamas since launch.
+    gui.on('CharacterExperienceGainMessage', function (msg) {
+      try {
+        if (msg && msg.experienceCharacter) {
+          session.xp += msg.experienceCharacter;
+          emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
+        }
+      } catch (e) {}
+    });
+    gui.on('KamasUpdateMessage', function (msg) {
+      try {
+        var total = msg && (msg.kamasTotal != null ? msg.kamasTotal : msg.kamas);
+        if (total == null) return;
+        if (lastKamas != null) session.kamas += total - lastKamas;
+        lastKamas = total;
+        emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
+      } catch (e) {}
     });
   }
 

@@ -272,6 +272,15 @@ button { font-family: inherit; }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
 
 /* ---------- Settings modal ---------- */
+#stats-panel { right: 10px; }
+.st { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.st-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.st-vals { display: flex; gap: 10px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-xp { color: var(--accent); }
+.st-kamas { color: var(--gold); }
+#stats-list { overflow-y: auto; padding: 6px; display: grid; gap: 6px; }
+
+#stats-panel,
 #monsters-panel {
   position: absolute;
   top: calc(var(--titlebar-h) + var(--tabbar-h) + 8px);

@@ -6,6 +6,7 @@ let settings = null;
 let accounts = [];
 let activeId = null;
 const identities = {}; // accountId -> { name, id } reported by each game hook
+const sessionStats = {}; // accountId -> { xp, kamas } gained since launch
 
 // In-game actions the launcher can trigger (the touch client has no native
 // keyboard shortcuts, so each opens the game's own window). The user assigns a
@@ -50,6 +51,8 @@ $('follow-toggle').onclick = toggleFollow;
 $('broadcast-toggle').onclick = toggleBroadcast;
 $('monsters-btn').onclick = toggleMonsters;
 $('monsters-close').onclick = () => ($('monsters-panel').hidden = true);
+$('stats-btn').onclick = toggleStats;
+$('stats-close').onclick = () => ($('stats-panel').hidden = true);
 
 // Launcher hotkeys while the chrome (not a game webview) has focus. When a game
 // webview has focus its preload forwards the same shortcuts over the 'hotkey'
@@ -222,6 +225,10 @@ function handleQol(accountId, msg) {
   if (msg.type === 'identity') {
     identities[accountId] = { name: msg.name, id: msg.id };
     autoNameTab(accountId, msg.name);
+    pushOwnAccounts();
+  } else if (msg.type === 'stats') {
+    sessionStats[accountId] = { xp: msg.xp || 0, kamas: msg.kamas || 0 };
+    if (!$('stats-panel').hidden) renderStats();
   } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
     else if (activeId !== accountId) {
@@ -281,6 +288,50 @@ async function autoNameTab(accountId, charName) {
   a.name = charName;
   renderTabs();
   await window.touch.accountsRename(accountId, charName);
+}
+
+// Tell every account which character ids belong to the user, so each can
+// auto-accept trades and duels coming from the others.
+function pushOwnAccounts() {
+  const ids = Object.values(identities).map((i) => i.id).filter((v) => v != null);
+  const payload = { type: 'own-accounts', ids, autoAccept: !!(settings && settings.autoAcceptOwn) };
+  for (const a of accounts) sendToView(a.id, payload);
+}
+
+function toggleStats() {
+  const panel = $('stats-panel');
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) renderStats();
+}
+
+const fmt = (n) => (n || 0).toLocaleString('fr-FR');
+
+function renderStats() {
+  const box = $('stats-list');
+  box.innerHTML = '';
+  if (!accounts.length) {
+    box.innerHTML = '<div class="mg-empty">Aucun compte.</div>';
+    return;
+  }
+  for (const a of accounts) {
+    const s = sessionStats[a.id] || { xp: 0, kamas: 0 };
+    const row = document.createElement('div');
+    row.className = 'st';
+    const name = document.createElement('span');
+    name.className = 'st-name';
+    name.textContent = a.name;
+    const vals = document.createElement('span');
+    vals.className = 'st-vals';
+    const xp = document.createElement('span');
+    xp.className = 'st-xp';
+    xp.textContent = '+' + fmt(s.xp) + ' XP';
+    const km = document.createElement('span');
+    km.className = 'st-kamas';
+    km.textContent = (s.kamas >= 0 ? '+' : '') + fmt(s.kamas) + ' K';
+    vals.append(xp, km);
+    row.append(name, vals);
+    box.appendChild(row);
+  }
 }
 
 // Ask the active account for the monster groups on its current map.
@@ -531,6 +582,7 @@ async function openSettings() {
   $('muted').checked = s.muted;
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
+  $('auto-accept-own').checked = s.autoAcceptOwn;
   editingKeybinds = { ...(s.keybinds || {}) };
   capturingAction = null;
   renderKeybinds();
@@ -544,6 +596,7 @@ async function saveSettings() {
     muted,
     switchOnTurn: $('switch-on-turn').checked,
     notifications: $('notifications').checked,
+    autoAcceptOwn: $('auto-accept-own').checked,
     keybinds: editingKeybinds,
   });
   for (const a of accounts) {
@@ -551,6 +604,7 @@ async function saveSettings() {
     if (wv && wv.setAudioMuted) wv.setAudioMuted(muted);
   }
   pushKeybinds();
+  pushOwnAccounts();
   $('settings-modal').hidden = true;
 }
 
