@@ -29,6 +29,7 @@ const KEYBIND_ACTIONS = [
   { id: 'groupSeeker', label: 'Recherche de groupe', defaultKey: 'r' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
+  { id: 'entities', label: 'Afficher les entités', defaultKey: 'z' },
   { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
   { id: 'spell1', label: 'Sort 1', defaultKey: '1' },
   { id: 'spell2', label: 'Sort 2', defaultKey: '2' },

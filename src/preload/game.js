@@ -189,8 +189,38 @@ function gameHook() {
         console.log('[qol-diag] fgConv=' + JSON.stringify(pick) +
           ' elemKeys=' + JSON.stringify(key ? Object.keys(mr.interactiveElements[key]) : null));
       }
+      // Candidates for the HUD "afficher les entités" toggle, by class/tooltip.
+      try {
+        var cands = [];
+        var nodes = document.querySelectorAll('div,button,span');
+        for (var n = 0; n < nodes.length; n++) {
+          var el = nodes[n];
+          var c = el.className;
+          if (c && c.baseVal !== undefined) c = c.baseVal;
+          if (typeof c !== 'string' || !c) continue;
+          if (/entit|eye|reveal|showAll|display/i.test(c)) cands.push(c.slice(0, 60));
+        }
+        console.log('[qol-diag] entityBtnCandidates=' + JSON.stringify(cands.slice(0, 20)));
+      } catch (e) {}
       if (mr || tries > 10) clearInterval(iv);
     }, 3000);
+  }
+
+  // Click the game's own "show entities" HUD toggle (the one that pops the
+  // monster group boxes). Located in the DOM because its label lives in the
+  // language files, not the script bundle.
+  function clickEntitiesToggle() {
+    try {
+      var el =
+        document.querySelector('[class*="showEntities" i]') ||
+        document.querySelector('[class*="entit" i]');
+      if (!el) return false;
+      ['mousedown', 'mouseup', 'click'].forEach(function (t) {
+        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+      });
+      return true;
+    } catch (e) {}
+    return false;
   }
 
   // Session gains read straight from playerData (message names vary by build).
@@ -254,6 +284,10 @@ function gameHook() {
   // Open the window the same way the game's menu button does (no forceToOpen —
   // that opens the shell but skips the content load); re-press closes it.
   function doAction(action) {
+    if (action === 'entities') {
+      clickEntitiesToggle();
+      return;
+    }
     var spell = /^spell(\d+)$/.exec(action);
     if (spell) {
       selectSpellSlot(Number(spell[1]) - 1);
