@@ -43,12 +43,19 @@ function gameHook() {
     return null;
   }
 
+  // Window ids taken from the game's own menu feature table. Note the hero*
+  // variants (equipEntity) are the mercenary windows and stay locked until the
+  // hero feature unlocks — the player's own windows are these.
   var ACTION_WINDOW = {
-    inventory: ['equipEntity', { tabId: 'heroInventory' }],
-    character: ['equipEntity', { tabId: 'heroCharacteristics' }],
-    spells: ['equipEntity', { tabId: 'heroSpells' }],
+    inventory: ['equipment', undefined],
+    character: ['characteristics', undefined],
+    spells: ['grimoire', { tabId: 'spells' }],
+    quests: ['grimoire', { tabId: 'quests' }],
+    jobs: ['grimoire', { tabId: 'jobs' }],
+    bestiary: ['grimoire', { tabId: 'bestiary' }],
     map: ['worldMap', undefined],
     social: ['social', { tabId: 'friends' }],
+    guild: ['social', { tabId: 'guild' }],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };

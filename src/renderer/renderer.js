@@ -12,10 +12,14 @@ const identities = {}; // accountId -> { name, id } reported by each game hook
 // trigger key to each; it applies to the active account.
 const KEYBIND_ACTIONS = [
   { id: 'inventory', label: 'Inventaire', defaultKey: 'i' },
-  { id: 'character', label: 'Personnage', defaultKey: 'c' },
+  { id: 'character', label: 'Caractéristiques', defaultKey: 'c' },
   { id: 'spells', label: 'Sorts', defaultKey: 's' },
+  { id: 'quests', label: 'Quêtes', defaultKey: 'q' },
+  { id: 'jobs', label: 'Métiers', defaultKey: 'j' },
+  { id: 'bestiary', label: 'Bestiaire', defaultKey: 'b' },
   { id: 'map', label: 'Carte', defaultKey: 'm' },
-  { id: 'social', label: 'Amis / Social', defaultKey: 'f' },
+  { id: 'social', label: 'Amis', defaultKey: 'f' },
+  { id: 'guild', label: 'Guilde', defaultKey: 'g' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
   { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
