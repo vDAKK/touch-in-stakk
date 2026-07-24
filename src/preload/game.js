@@ -161,31 +161,56 @@ function gameHook() {
     return out;
   }
 
-  // One-shot probe: reports which of the APIs the overlay/boxes rely on exist.
+  // Probe: retries until the map engine shows up, and reports the real global
+  // names so the overlay can bind to whatever this build exposes.
   function diagOnce() {
-    if (diagOnce.done) return;
-    diagOnce.done = true;
-    try {
+    if (diagOnce.started) return;
+    diagOnce.started = true;
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries += 1;
+      var globals = [];
+      try {
+        for (var k in window) {
+          if (/iso|foreground|mapRender|scene/i.test(k)) globals.push(k);
+        }
+      } catch (e) {}
       var mr = window.isoEngine && window.isoEngine.mapRenderer;
-      var fg = window.foreground;
-      var pick = function (o) {
-        if (!o) return null;
-        var out = [];
-        for (var k in o) { if (/convert|scene|screen|actorBox|updateActors|boxes/i.test(k)) out.push(k); }
-        return out;
-      };
-      console.log('[qol-diag] mr=' + !!mr +
-        ' getCellSceneCoordinate=' + !!(mr && typeof mr.getCellSceneCoordinate === 'function') +
-        ' interactiveElements=' + (mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1) +
-        ' identifiedElements=' + (mr && mr.identifiedElements ? Object.keys(mr.identifiedElements).length : -1) +
-        ' fg=' + !!fg +
-        ' fgMatch=' + JSON.stringify(pick(fg)) +
-        ' isoMatch=' + JSON.stringify(pick(window.isoEngine)));
-      if (mr && mr.interactiveElements) {
-        var k = Object.keys(mr.interactiveElements)[0];
-        if (k) console.log('[qol-diag] elemKeys=' + JSON.stringify(Object.keys(mr.interactiveElements[k])));
+      console.log('[qol-diag] try=' + tries +
+        ' iso=' + typeof window.isoEngine +
+        ' fg=' + typeof window.foreground +
+        ' mr=' + !!mr +
+        ' ie=' + (mr && mr.interactiveElements ? Object.keys(mr.interactiveElements).length : -1) +
+        ' globals=' + JSON.stringify(globals.slice(0, 25)));
+      if (mr) {
+        var pick = [];
+        for (var f in window.foreground || {}) { if (/convert|scene|screen/i.test(f)) pick.push(f); }
+        var key = Object.keys(mr.interactiveElements || {})[0];
+        console.log('[qol-diag] fgConv=' + JSON.stringify(pick) +
+          ' elemKeys=' + JSON.stringify(key ? Object.keys(mr.interactiveElements[key]) : null));
       }
-    } catch (e) { console.log('[qol-diag] ERR ' + (e && e.message)); }
+      if (mr || tries > 10) clearInterval(iv);
+    }, 3000);
+  }
+
+  // Session gains read straight from playerData (message names vary by build).
+  var base = { xp: null, kamas: null };
+  function readGains() {
+    try {
+      var pd = window.gui && window.gui.playerData;
+      if (!pd) return;
+      var xp = null;
+      if (pd.experience != null) xp = pd.experience;
+      else if (pd.characteristics && pd.characteristics.experience != null) xp = pd.characteristics.experience;
+      var kamas = null;
+      if (pd.kamas != null) kamas = pd.kamas;
+      else if (pd.inventory && pd.inventory.kamas != null) kamas = pd.inventory.kamas;
+      if (xp == null && kamas == null) return;
+      if (base.xp == null) { base.xp = xp; base.kamas = kamas; return; }
+      session.xp = xp != null && base.xp != null ? xp - base.xp : session.xp;
+      session.kamas = kamas != null && base.kamas != null ? kamas - base.kamas : session.kamas;
+      emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
+    } catch (e) {}
   }
 
   function drawResourceOverlay() {
@@ -296,7 +321,9 @@ function gameHook() {
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);
     if (showResources) setResourceOverlay(true);
-    setTimeout(diagOnce, 3000);
+    diagOnce();
+    readGains();
+    setInterval(readGains, 4000);
 
     // Report this account's character so the host can coordinate accounts.
     try {
@@ -353,26 +380,6 @@ function gameHook() {
       } catch (e) {}
     });
 
-    // Session counters: experience gained and net kamas since launch.
-    gui.on('CharacterExperienceGainMessage', function (msg) {
-      try {
-        console.log('[qol-diag] xpMsg ' + JSON.stringify(msg && Object.keys(msg)));
-        if (msg && msg.experienceCharacter) {
-          session.xp += msg.experienceCharacter;
-          emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
-        }
-      } catch (e) {}
-    });
-    gui.on('KamasUpdateMessage', function (msg) {
-      try {
-        console.log('[qol-diag] kamasMsg ' + JSON.stringify(msg && Object.keys(msg)));
-        var total = msg && (msg.kamasTotal != null ? msg.kamasTotal : msg.kamas);
-        if (total == null) return;
-        if (lastKamas != null) session.kamas += total - lastKamas;
-        lastKamas = total;
-        emit({ type: 'stats', xp: session.xp, kamas: session.kamas });
-      } catch (e) {}
-    });
   }
 
   function ready() {
