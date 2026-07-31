@@ -398,3 +398,68 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* --- Admin / anti-cheat panel ------------------------------------------- */
+.admin-card { max-width: 520px; }
+.admin-mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+.admin-danger .field-label { color: #e5737b; }
+.admin-note {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+.admin-empty { font-size: 12px; color: rgba(255, 255, 255, 0.35); padding: 4px 2px; }
+.btn-tiny { padding: 2px 8px; font-size: 11px; }
+
+/* --- Blocked (banned machine) screen ------------------------------------ */
+#blocked-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+.blocked-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid #e5737b;
+  position: relative;
+}
+.blocked-mark::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 12%;
+  right: 12%;
+  height: 3px;
+  background: #e5737b;
+  transform: translateY(-50%) rotate(-45deg);
+}
+#blocked-screen h1 { font-size: 20px; }
+#blocked-screen p { color: rgba(255, 255, 255, 0.55); max-width: 360px; }

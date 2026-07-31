@@ -410,8 +410,27 @@ function gameHook() {
       emit({ type: 'position', mapId: pos.mapId, cellId: pos.cellId });
     } else if (p.type === 'mule-follow') {
       muleFollow(p.mapId, p.cellId);
+    } else if (p.type === 'auto-harvest') {
+      setAutoHarvest(!!p.on);
     }
   });
+
+  // --- HONEYPOT: auto-harvest tripwire ---------------------------------------
+  // Retouch's mule auto-collects interactives (__muleInteractive) and travels to
+  // a target map on its own — an autonomous farming bot. We ship the feature's
+  // SHAPE as bait: the toggle lives in the hidden admin menu, defaults off, and
+  // the harvest routine below is DELIBERATELY INERT. It sends no game message
+  // (no InteractiveUseRequest), so nothing is ever collected. Enabling it only
+  // trips the flag in the admin layer (security:flag) so the operator can ban
+  // the machine. Do NOT wire real harvesting here — that would make it a bot.
+  var autoHarvestOn = false;
+  function setAutoHarvest(on) {
+    autoHarvestOn = on;
+    if (!on) return;
+    // Intentionally does not act. Present so tampering to "make it work" is
+    // visible/attributable rather than hidden.
+    try { console.warn('[qol] auto-harvest requested — inert stub, no action taken'); } catch (e) {}
+  }
 
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);

@@ -7,6 +7,8 @@ const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VER
 const { startProxy } = require('./proxy');
 const { prepareSession } = require('./session-prep');
 const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
+const { getMachineId } = require('./machine-id');
+const security = require('./security');
 
 // Fixed so the game's origin (http://127.0.0.1:<port>) is stable across
 // launches and the saved session (cookies/localStorage) is found on relaunch.
@@ -173,7 +175,21 @@ async function boot() {
     return { action: 'deny' };
   });
 
+  // Machine-ban kill-switch (Retouch reproduction): a banned machine gets the
+  // block screen instead of the app. Ban list is operator-controlled and empty
+  // by default, so this is a no-op unless someone is deliberately flagged.
+  const machine = getMachineId(userDataDir());
+  if (security.isBanned(userDataDir(), machine.id)) {
+    logToFile('boot: machine banned ' + machine.id);
+    mainWindow.loadFile(path.join(__dirname, '../renderer/blocked.html'));
+    return;
+  }
+
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+}
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
 ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
@@ -212,6 +228,29 @@ ipcMain.on('window:toggle-maximize', () => {
 ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 ipcMain.on('window:toggle-fullscreen', () => {
   if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
+
+// Admin / anti-cheat surface. `security:info` feeds the hidden admin panel;
+// `security:flag` is the honeypot tripwire fired when the (non-functional)
+// auto-harvest toggle is enabled. ban/unban are manual operator actions.
+ipcMain.handle('security:info', () => {
+  const machine = getMachineId(userDataDir());
+  const store = security.load(userDataDir());
+  return { machineId: machine.id, source: machine.source, bans: store.bans, flags: store.flags };
+});
+ipcMain.handle('security:flag', (_e, reason, meta) => {
+  const machine = getMachineId(userDataDir());
+  logToFile('SECURITY flag: ' + reason + ' machine=' + machine.id + ' meta=' + JSON.stringify(meta || null));
+  security.flag(userDataDir(), machine.id, String(reason || 'unknown'), meta || null, nowIso());
+  return true;
+});
+ipcMain.handle('security:ban', (_e, machineId, reason) => {
+  security.ban(userDataDir(), String(machineId), reason ? String(reason) : null, nowIso());
+  return security.load(userDataDir()).bans;
+});
+ipcMain.handle('security:unban', (_e, machineId) => {
+  security.unban(userDataDir(), String(machineId));
+  return security.load(userDataDir()).bans;
 });
 
 app.whenReady().then(boot);

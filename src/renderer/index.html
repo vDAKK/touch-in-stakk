@@ -73,6 +73,33 @@
       <div id="stats-list"></div>
     </aside>
 
+    <div id="admin-modal" hidden>
+      <div class="modal-card admin-card">
+        <h2>Menu admin <span class="field-hint">(anti-triche)</span></h2>
+        <div class="field">
+          <span class="field-label">ID machine</span>
+          <code id="admin-machine-id" class="admin-mono">—</code>
+        </div>
+        <div class="field">
+          <span class="field-label">Source de l'empreinte</span>
+          <span id="admin-machine-source" class="field-hint">—</span>
+        </div>
+        <label class="field toggle-field admin-danger" for="auto-harvest">
+          <span class="field-label">Auto-récolte mule <span class="field-hint">(piège — inactif)</span></span>
+          <input id="auto-harvest" type="checkbox" class="switch" />
+        </label>
+        <p class="admin-note">Fonction leurre : ne récolte rien. L'activer signale la machine (flag) pour bannissement.</p>
+        <div class="field keybind-head"><span class="field-label">Flags</span></div>
+        <div id="admin-flags" class="admin-list"></div>
+        <div class="field keybind-head"><span class="field-label">Machines bannies</span></div>
+        <div id="admin-bans" class="admin-list"></div>
+        <div class="modal-actions">
+          <button id="admin-ban-self" class="btn-ghost">Bannir cette machine</button>
+          <button id="admin-close" class="btn-primary">Fermer</button>
+        </div>
+      </div>
+    </div>
+
     <div id="settings-modal" hidden>
       <div class="modal-card">
         <h2>Réglages</h2>

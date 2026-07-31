@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld('touch', {
   windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
   windowToggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
+  securityInfo: () => ipcRenderer.invoke('security:info'),
+  securityFlag: (reason, meta) => ipcRenderer.invoke('security:flag', reason, meta),
+  securityBan: (machineId, reason) => ipcRenderer.invoke('security:ban', machineId, reason),
+  securityUnban: (machineId) => ipcRenderer.invoke('security:unban', machineId),
 });
