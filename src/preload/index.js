@@ -23,4 +23,7 @@ contextBridge.exposeInMainWorld('touch', {
   securityFlag: (reason, meta) => ipcRenderer.invoke('security:flag', reason, meta),
   securityBan: (machineId, reason) => ipcRenderer.invoke('security:ban', machineId, reason),
   securityUnban: (machineId) => ipcRenderer.invoke('security:unban', machineId),
+  signalAttention: () => ipcRenderer.send('window:attention'),
+  installUpdate: () => ipcRenderer.invoke('updater:install'),
+  onUpdaterStatus: (cb) => ipcRenderer.on('updater:status', (_e, s) => cb(s)),
 });

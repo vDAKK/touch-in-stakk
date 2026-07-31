@@ -17,6 +17,7 @@
   "dependencies": {
     "axios": "^1.7.0",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.0"
   },
   "devDependencies": {
@@ -26,13 +27,36 @@
   "build": {
     "appId": "com.stakk.touchinstakk",
     "productName": "Touch in STAKK",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json", "stakk.ico"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "stakk.ico"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "vDAKK",
+        "repo": "touch-in-stakk-releases"
+      }
+    ],
     "win": {
       "icon": "stakk.ico",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -46,8 +70,20 @@
     "mac": {
       "category": "public.app-category.games",
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "artifactName": "Touch-in-STAKK-${version}-${arch}.${ext}"
     },

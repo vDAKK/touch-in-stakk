@@ -9,6 +9,9 @@ const { prepareSession } = require('./session-prep');
 const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
 const { getMachineId } = require('./machine-id');
 const security = require('./security');
+const { initAutoUpdate } = require('./updater');
+
+let updater = null;
 
 // Fixed so the game's origin (http://127.0.0.1:<port>) is stable across
 // launches and the saved session (cookies/localStorage) is found on relaunch.
@@ -186,6 +189,10 @@ async function boot() {
   }
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+  updater = initAutoUpdate(app, (ch, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(ch, payload);
+  }, logToFile);
 }
 
 function nowIso() {
@@ -228,6 +235,14 @@ ipcMain.on('window:toggle-maximize', () => {
 ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 ipcMain.on('window:toggle-fullscreen', () => {
   if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
+// An account needs attention (combat turn, whisper) while the launcher isn't
+// focused: flash the taskbar entry so the user notices without stealing focus.
+ipcMain.on('window:attention', () => {
+  if (mainWindow && !mainWindow.isFocused()) mainWindow.flashFrame(true);
+});
+ipcMain.handle('updater:install', () => {
+  if (updater) updater.quitAndInstall();
 });
 
 // Admin / anti-cheat surface. `security:info` feeds the hidden admin panel;

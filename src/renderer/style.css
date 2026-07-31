@@ -463,3 +463,16 @@ button { font-family: inherit; }
 }
 #blocked-screen h1 { font-size: 20px; }
 #blocked-screen p { color: rgba(255, 255, 255, 0.55); max-width: 360px; }
+
+/* --- Update banner ------------------------------------------------------- */
+#update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent-dim);
+}

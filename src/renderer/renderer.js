@@ -196,6 +196,18 @@ $('admin-ban-self').onclick = async () => {
 };
 $('admin-close').onclick = () => { $('admin-modal').hidden = true; };
 
+// --- Auto-update banner ------------------------------------------------------
+$('update-install').onclick = () => window.touch.installUpdate();
+window.touch.onUpdaterStatus((s) => {
+  const banner = $('update-banner');
+  const text = $('update-text');
+  const install = $('update-install');
+  if (s.status === 'available') { text.textContent = `Mise à jour ${s.version} disponible — téléchargement…`; install.hidden = true; banner.hidden = false; }
+  else if (s.status === 'downloading') { text.textContent = `Téléchargement de la mise à jour… ${s.percent || 0}%`; install.hidden = true; banner.hidden = false; }
+  else if (s.status === 'ready') { text.textContent = `Mise à jour ${s.version} prête.`; install.hidden = false; banner.hidden = false; }
+  else if (s.status === 'error') { banner.hidden = true; }
+});
+
 const viewId = (id) => 'view-' + id;
 const tabId = (id) => 'tab-' + id;
 
@@ -336,6 +348,7 @@ function handleQol(accountId, msg) {
       setAlert(accountId, true);
       if (settings.notifications) beep();
     }
+    maybeAttention();
     pulseTab(accountId);
   } else if (msg.type === 'whisper') {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
@@ -351,8 +364,15 @@ function accountName(id) {
 
 // Badge the tab, play a short tone, and raise a desktop notification (unless the
 // tab is already the active one).
+// Flash the taskbar entry when a background account needs attention and the
+// launcher window isn't in the foreground.
+function maybeAttention() {
+  try { if (!document.hasFocus()) window.touch.signalAttention(); } catch (e) {}
+}
+
 function notify(accountId, text) {
   if (activeId !== accountId) setAlert(accountId, true);
+  maybeAttention();
   if (!settings.notifications) return;
   beep();
   try {
