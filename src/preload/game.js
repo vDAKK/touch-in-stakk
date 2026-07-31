@@ -124,6 +124,30 @@ function gameHook() {
     } catch (e) {}
   }
 
+  // Mule follow: mirror the leader's exact cell on the same map (the native
+  // party-follow only handles map changes, not intra-map positioning). Uses the
+  // client's own _movePlayerOnMap, guarded on map-load state like Retouch does.
+  function readPosition() {
+    try {
+      var iso = window.isoEngine;
+      var am = window.actorManager;
+      var mapId = iso && iso.mapRenderer ? iso.mapRenderer.mapId : null;
+      var cellId = am && am.userActor ? am.userActor.cellId : null;
+      return { mapId: mapId, cellId: cellId };
+    } catch (e) { return { mapId: null, cellId: null }; }
+  }
+
+  function muleFollow(mapId, cellId) {
+    try {
+      var iso = window.isoEngine;
+      var am = window.actorManager;
+      if (!iso || !am || !am.userActor || !iso.mapRenderer || !iso.mapRenderer.isReady) return;
+      if (iso.mapRenderer.mapId !== mapId) return; // different map -> native party-follow handles it
+      if (am.userActor.moving || am.userActor.cellId === cellId) return;
+      iso._movePlayerOnMap(cellId, false);
+    } catch (e) {}
+  }
+
   // Hide the real-money shop button from the HUD.
   var shopStyle = null;
   function setHideShop(on) {
@@ -360,6 +384,11 @@ function gameHook() {
     } else if (p.type === 'hide-shop') {
       hideShop = !!p.on;
       setHideShop(hideShop);
+    } else if (p.type === 'get-position') {
+      var pos = readPosition();
+      emit({ type: 'position', mapId: pos.mapId, cellId: pos.cellId });
+    } else if (p.type === 'mule-follow') {
+      muleFollow(p.mapId, p.cellId);
     }
   });
 

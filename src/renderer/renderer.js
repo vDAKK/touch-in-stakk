@@ -52,6 +52,7 @@ $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
 $('follow-toggle').onclick = toggleFollow;
 $('broadcast-toggle').onclick = toggleBroadcast;
+$('mule-toggle').onclick = toggleMuleFollow;
 $('stats-btn').onclick = toggleStats;
 $('stats-close').onclick = () => ($('stats-panel').hidden = true);
 
@@ -257,6 +258,13 @@ function handleQol(accountId, msg) {
   } else if (msg.type === 'stats') {
     sessionStats[accountId] = { xp: msg.xp || 0, kamas: msg.kamas || 0 };
     if (!$('stats-panel').hidden) renderStats();
+  } else if (msg.type === 'position') {
+    // Leader's position -> tell the mules (other accounts) to join its cell.
+    if (muleFollowing && accountId === activeId && msg.mapId != null && msg.cellId != null) {
+      for (const a of accounts) {
+        if (a.id !== accountId) sendToView(a.id, { type: 'mule-follow', mapId: msg.mapId, cellId: msg.cellId });
+      }
+    }
   } else if (msg.type === 'my-turn') {
     if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
     else if (activeId !== accountId) {
@@ -488,6 +496,23 @@ function handleBcastKey(sourceId, data) {
     })
     .filter(Boolean);
   if (targets.length) window.touch.broadcastKey(targets, data.key);
+}
+
+// Mule follow: poll the active account's position and mirror it onto the others.
+let muleFollowing = false;
+let muleTimer = null;
+function toggleMuleFollow() {
+  muleFollowing = !muleFollowing;
+  $('mule-toggle').classList.toggle('on', muleFollowing);
+  if (muleTimer) {
+    clearInterval(muleTimer);
+    muleTimer = null;
+  }
+  if (muleFollowing) {
+    muleTimer = setInterval(() => {
+      if (activeId) sendToView(activeId, { type: 'get-position' });
+    }, 600);
+  }
 }
 
 let following = false;
