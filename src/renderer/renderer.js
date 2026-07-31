@@ -354,6 +354,14 @@ function handleQol(accountId, msg) {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
   } else if (msg.type === 'disconnected') {
     notify(accountId, 'Déconnecté du jeu');
+  } else if (msg.type === 'honeypot-trip') {
+    // The inert bot stub fired: record a rich flag (account + where it tripped).
+    window.touch.securityFlag(msg.feature + '-enabled', {
+      account: accountName(accountId),
+      mapId: msg.mapId,
+      cellId: msg.cellId,
+      interactiveCount: msg.interactiveCount,
+    });
   }
 }
 
