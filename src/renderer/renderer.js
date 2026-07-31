@@ -77,9 +77,6 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'F11') {
     e.preventDefault();
     handleHotkey({ name: 'fullscreen' });
-  } else if (e.ctrlKey && e.shiftKey && e.altKey && (e.key === 'A' || e.key === 'a')) {
-    e.preventDefault();
-    openAdmin();
   }
 });
 
@@ -135,66 +132,6 @@ function startEntitiesCapture() {
   sendToView(activeId, { type: 'capture-entities' });
 }
 $('retry').onclick = retryPatch;
-
-// --- Admin / anti-cheat panel (hidden: Ctrl+Shift+Alt+A) ---------------------
-let adminMachineId = null;
-
-async function openAdmin() {
-  const info = await window.touch.securityInfo();
-  adminMachineId = info.machineId;
-  $('admin-machine-id').textContent = info.machineId;
-  $('admin-machine-source').textContent =
-    info.source === 'registry' ? 'registre (MachineGuid)' : 'fichier (fallback)';
-  $('auto-harvest').checked = false;
-  renderAdminList('admin-flags', info.flags, (f) => `${f.reason} · ${f.at || '?'}`);
-  renderAdminList('admin-bans', info.bans, (b) => `${short(b.machineId)} · ${b.reason || 'banni'}`, true);
-  $('admin-modal').hidden = false;
-}
-
-function short(id) {
-  return id && id.length > 16 ? id.slice(0, 16) + '…' : id;
-}
-
-function renderAdminList(elId, items, label, withUnban) {
-  const box = $(elId);
-  box.innerHTML = '';
-  if (!items || !items.length) {
-    box.innerHTML = '<div class="admin-empty">Aucun</div>';
-    return;
-  }
-  for (const it of items) {
-    const row = document.createElement('div');
-    row.className = 'admin-row';
-    const span = document.createElement('span');
-    span.textContent = label(it);
-    row.appendChild(span);
-    if (withUnban) {
-      const btn = document.createElement('button');
-      btn.className = 'btn-ghost btn-tiny';
-      btn.textContent = 'Débannir';
-      btn.onclick = async () => {
-        await window.touch.securityUnban(it.machineId);
-        openAdmin();
-      };
-      row.appendChild(btn);
-    }
-    box.appendChild(row);
-  }
-}
-
-// Honeypot: enabling the (inert) auto-harvest trips the flag on this machine.
-$('auto-harvest').onchange = async (e) => {
-  if (!e.target.checked) return;
-  await window.touch.securityFlag('auto-harvest-enabled', { via: 'admin-toggle' });
-  if (activeId) sendToView(activeId, { type: 'auto-harvest', on: true });
-  openAdmin();
-};
-
-$('admin-ban-self').onclick = async () => {
-  if (adminMachineId) await window.touch.securityBan(adminMachineId, 'manual');
-  openAdmin();
-};
-$('admin-close').onclick = () => { $('admin-modal').hidden = true; };
 
 // --- Auto-update banner ------------------------------------------------------
 $('update-install').onclick = () => window.touch.installUpdate();
@@ -354,14 +291,6 @@ function handleQol(accountId, msg) {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
   } else if (msg.type === 'disconnected') {
     notify(accountId, 'Déconnecté du jeu');
-  } else if (msg.type === 'honeypot-trip') {
-    // The inert bot stub fired: record a rich flag (account + where it tripped).
-    window.touch.securityFlag(msg.feature + '-enabled', {
-      account: accountName(accountId),
-      mapId: msg.mapId,
-      cellId: msg.cellId,
-      interactiveCount: msg.interactiveCount,
-    });
   }
 }
 
