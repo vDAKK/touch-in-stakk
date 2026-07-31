@@ -308,9 +308,30 @@ function gameHook() {
     resOverlay.timer = setInterval(drawResourceOverlay, 300);
   }
 
+  // Some HUD entries aren't plain windows (zaap teleport, goultines shop), so —
+  // like Retouch — trigger them by clicking their menu icon, which runs the
+  // game's own full flow.
+  var MENU_ICON = {
+    zaap: 'menuIconZaap',
+    goultines: 'menuIconGoultine',
+  };
+  function clickMenuIcon(cls) {
+    try {
+      var el = document.querySelector('.' + cls);
+      if (!el) return;
+      ['mousedown', 'mouseup', 'click'].forEach(function (t) {
+        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+      });
+    } catch (e) {}
+  }
+
   // Open the window the same way the game's menu button does (no forceToOpen —
   // that opens the shell but skips the content load); re-press closes it.
   function doAction(action) {
+    if (MENU_ICON[action]) {
+      clickMenuIcon(MENU_ICON[action]);
+      return;
+    }
     if (action === 'entities') {
       clickEntitiesToggle();
       return;

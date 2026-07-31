@@ -29,6 +29,8 @@ const KEYBIND_ACTIONS = [
   { id: 'groupSeeker', label: 'Recherche de groupe', defaultKey: 'r' },
   { id: 'toa', label: 'Temple (TOA)', defaultKey: 't' },
   { id: 'titles', label: 'Titres / Ornements', defaultKey: 'n' },
+  { id: 'zaap', label: 'Zaap / Téléportation', defaultKey: 'w' },
+  { id: 'goultines', label: 'Boutique (goultines)', defaultKey: 'x' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
   { id: 'entities', label: 'Afficher les entités', defaultKey: 'z' },
