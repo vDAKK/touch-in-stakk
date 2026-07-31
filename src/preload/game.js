@@ -154,7 +154,7 @@ function gameHook() {
     if (on) {
       if (shopStyle) return;
       shopStyle = document.createElement('style');
-      shopStyle.textContent = '.menuIconShop, .shopButton, [class*="shopButton"] { display: none !important; }';
+      shopStyle.textContent = '.shopBtn, .menuIconGoultine, .menuIconGoultineAnimated { display: none !important; }';
       (document.head || document.documentElement).appendChild(shopStyle);
     } else if (shopStyle) {
       shopStyle.remove();
