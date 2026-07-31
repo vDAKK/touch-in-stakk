@@ -27,6 +27,8 @@ const KEYBIND_ACTIONS = [
   { id: 'koliseum', label: 'Koliseum', defaultKey: 'k' },
   { id: 'dailyQuest', label: 'Quêtes du jour', defaultKey: 'd' },
   { id: 'groupSeeker', label: 'Recherche de groupe', defaultKey: 'r' },
+  { id: 'toa', label: 'Temple (TOA)', defaultKey: 't' },
+  { id: 'titles', label: 'Titres / Ornements', defaultKey: 'n' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
   { id: 'entities', label: 'Afficher les entités', defaultKey: 'z' },
@@ -69,6 +71,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.ctrlKey && e.key === 'Tab') {
     e.preventDefault();
     handleHotkey({ name: 'cycle', dir: e.shiftKey ? -1 : 1 });
+  } else if (e.key === 'F11') {
+    e.preventDefault();
+    handleHotkey({ name: 'fullscreen' });
   }
 });
 
@@ -77,6 +82,7 @@ function handleHotkey(hk) {
   if (hk.name === 'ready-all') broadcastToAll({ type: 'ready', value: true });
   else if (hk.name === 'switch') { if (accounts[hk.index]) setActive(accounts[hk.index].id); }
   else if (hk.name === 'cycle') cycleTab(hk.dir);
+  else if (hk.name === 'fullscreen') window.touch.windowToggleFullscreen();
 }
 
 function cycleTab(dir) {
@@ -166,6 +172,7 @@ async function createView(account) {
     wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
     wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
     if (settings.entitiesSelector) wv.send('qol', { type: 'entities-selector', selector: settings.entitiesSelector });
+    wv.send('qol', { type: 'hide-shop', on: !!settings.hideShop });
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
@@ -313,7 +320,7 @@ async function autoNameTab(accountId, charName) {
 // auto-accept trades and duels coming from the others.
 function pushOwnAccounts() {
   const ids = Object.values(identities).map((i) => i.id).filter((v) => v != null);
-  const payload = { type: 'own-accounts', ids, autoAccept: !!(settings && settings.autoAcceptOwn) };
+  const payload = { type: 'own-accounts', ids, autoAccept: !!(settings && settings.autoAcceptOwn), autoAcceptGroup: !!(settings && settings.autoAcceptGroup) };
   for (const a of accounts) sendToView(a.id, payload);
 }
 
@@ -563,6 +570,8 @@ async function openSettings() {
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
   $('no-confirm').checked = s.noConfirm;
+  $('auto-accept-group').checked = s.autoAcceptGroup;
+  $('hide-shop').checked = s.hideShop;
   $('show-resources').checked = s.showResources;
   $('auto-accept-own').checked = s.autoAcceptOwn;
   editingKeybinds = { ...(s.keybinds || {}) };
@@ -581,6 +590,8 @@ async function saveSettings() {
     noConfirm: $('no-confirm').checked,
     showResources: $('show-resources').checked,
     autoAcceptOwn: $('auto-accept-own').checked,
+    autoAcceptGroup: $('auto-accept-group').checked,
+    hideShop: $('hide-shop').checked,
     entitiesSelector: settings.entitiesSelector || null,
     keybinds: editingKeybinds,
   });
@@ -592,6 +603,7 @@ async function saveSettings() {
   pushOwnAccounts();
   broadcastToAll({ type: 'no-confirm', on: !!settings.noConfirm });
   broadcastToAll({ type: 'resource-overlay', on: !!settings.showResources });
+  broadcastToAll({ type: 'hide-shop', on: !!settings.hideShop });
   $('settings-modal').hidden = true;
 }
 

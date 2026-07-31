@@ -210,6 +210,9 @@ ipcMain.on('window:toggle-maximize', () => {
   mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
 });
 ipcMain.on('window:close', () => mainWindow && mainWindow.close());
+ipcMain.on('window:toggle-fullscreen', () => {
+  if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
 
 app.whenReady().then(boot);
 app.on('window-all-closed', () => {

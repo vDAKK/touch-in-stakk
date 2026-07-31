@@ -17,6 +17,8 @@ function gameHook() {
   var lastKamas = null;
   var noConfirm = false;
   var showResources = false;
+  var autoAcceptGroup = false;
+  var hideShop = false;
 
   function emit(payload) {
     try {
@@ -68,6 +70,8 @@ function gameHook() {
     koliseum: ['arena', undefined],
     dailyQuest: ['dailyQuest', undefined],
     groupSeeker: ['groupSeeker', undefined],
+    toa: ['TOA', { tabId: 'general' }],
+    titles: ['grimoire', { tabId: 'ornaments' }],
     options: ['options', undefined],
     mount: ['mount', undefined],
   };
@@ -76,11 +80,18 @@ function gameHook() {
   // the game then casts it on the next map tap.
   function selectSpellSlot(index) {
     try {
-      var bar = window.gui.shortcutBars && window.gui.shortcutBars.playerBar;
+      var pd = window.gui.playerData;
+      var mgr = window.gui.shortcutBarManager;
+      var bar = mgr && mgr.shortcutBars && mgr.shortcutBars.playerBar;
       var slot = bar && bar.getSpellSlotByIndex ? bar.getSpellSlotByIndex(index) : null;
-      if (!slot || (slot.isEmpty && slot.isEmpty()) || !slot.shortcut) return;
-      var fighterId = slot.getFighterId ? slot.getFighterId() : window.gui.playerData.id;
-      window.gui.emit('spellSlotSelected', fighterId, slot.shortcut.spellId);
+      var spellId = slot && slot.shortcut && slot.shortcut.spellId;
+      if (spellId == null && pd && pd.spellShortcuts) {
+        for (var i = 0; i < pd.spellShortcuts.length; i++) {
+          if (pd.spellShortcuts[i].slotIndex === index) { spellId = pd.spellShortcuts[i].spellId; break; }
+        }
+      }
+      if (spellId == null) return;
+      window.gui.emit('spellSlotSelected', pd.id, spellId);
     } catch (e) {}
   }
 
@@ -111,6 +122,20 @@ function gameHook() {
       o.confirmBoxWhenClickCasting = on ? 0 : 1;
       o.confirmBoxWhenDragCasting = on ? 0 : 1;
     } catch (e) {}
+  }
+
+  // Hide the real-money shop button from the HUD.
+  var shopStyle = null;
+  function setHideShop(on) {
+    if (on) {
+      if (shopStyle) return;
+      shopStyle = document.createElement('style');
+      shopStyle.textContent = '.menuIconShop, .shopButton, [class*="shopButton"] { display: none !important; }';
+      (document.head || document.documentElement).appendChild(shopStyle);
+    } else if (shopStyle) {
+      shopStyle.remove();
+      shopStyle = null;
+    }
   }
 
   // --- Resource overlay -----------------------------------------------------
@@ -331,12 +356,17 @@ function gameHook() {
       ownIds = {};
       (p.ids || []).forEach(function (id) { ownIds[id] = true; });
       autoAccept = !!p.autoAccept;
+      autoAcceptGroup = !!p.autoAcceptGroup;
+    } else if (p.type === 'hide-shop') {
+      hideShop = !!p.on;
+      setHideShop(hideShop);
     }
   });
 
   function onGuiReady(gui) {
     if (noConfirm) applyNoConfirm(true);
     if (showResources) setResourceOverlay(true);
+    if (hideShop) setHideShop(true);
     readGains();
     setInterval(readGains, 4000);
 
@@ -354,10 +384,12 @@ function gameHook() {
       } catch (e) {}
     });
 
-    // Auto-accept a party invite when it comes from the expected leader.
+    // Auto-accept a party invite: always when it's from the expected leader,
+    // and (optionally) any incoming group invite.
     gui.on('PartyInvitationMessage', function (msg) {
       try {
-        if (expectInviteFrom && msg && msg.fromName === expectInviteFrom) {
+        if (!msg) return;
+        if (autoAcceptGroup || (expectInviteFrom && msg.fromName === expectInviteFrom)) {
           send('PartyAcceptInvitationMessage', { partyId: msg.partyId });
           expectInviteFrom = null;
         }

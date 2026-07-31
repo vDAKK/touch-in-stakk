@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('touch', {
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
+  windowToggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
 });
