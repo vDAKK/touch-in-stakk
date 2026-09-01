@@ -184,10 +184,27 @@ async function boot() {
 }
 
 ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
-ipcMain.handle('settings:set', (_e, partial) => saveSettings(userDataDir(), partial));
+ipcMain.handle('settings:set', (_e, partial) => {
+  const saved = saveSettings(userDataDir(), partial);
+  // Apply a new window size on the spot (unless the window is maximized or
+  // fullscreen, where a fixed size would make no sense).
+  if (
+    partial && partial.resolution && mainWindow && !mainWindow.isDestroyed() &&
+    !mainWindow.isMaximized() && !mainWindow.isFullScreen()
+  ) {
+    mainWindow.setSize(saved.resolution.width, saved.resolution.height);
+  }
+  return saved;
+});
 ipcMain.handle('game:url', () => `http://127.0.0.1:${proxy.port}/game/index.html`);
 ipcMain.handle('game:preload-path', () => pathToFileURL(path.join(__dirname, '../preload/game.js')).href);
 ipcMain.handle('app:version', () => app.getVersion());
+// Open a link in the user's default browser. Restricted to https so a
+// compromised renderer can't launch arbitrary schemes/executables.
+ipcMain.handle('app:open-external', (_e, url) => {
+  if (typeof url === 'string' && /^https:\/\//i.test(url)) shell.openExternal(url);
+  return true;
+});
 ipcMain.handle('patch:status', () => patchOk);
 ipcMain.handle('patch:retry', () => startOrRestartProxy());
 ipcMain.handle('accounts:list', () => loadAccounts(userDataDir()));
@@ -210,6 +227,11 @@ ipcMain.handle('broadcast:key', (_e, wcIds, key) => {
 ipcMain.handle('session:prepare', (_e, partition) => {
   prepareSession(session.fromPartition(partition), logToFile);
   return true;
+});
+// Renderer-side diagnostics (window-id/travel probes) land in app.log so they
+// can be read back off disk without the game console.
+ipcMain.on('debug:log', (_e, tag, data) => {
+  try { logToFile(String(tag) + ' ' + JSON.stringify(data)); } catch { logToFile(String(tag) + ' <unserializable>'); }
 });
 ipcMain.on('window:minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('window:toggle-maximize', () => {

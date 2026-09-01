@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('touch', {
   getPatchStatus: () => ipcRenderer.invoke('patch:status'),
   retryPatch: () => ipcRenderer.invoke('patch:retry'),
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
+  logDebug: (tag, data) => ipcRenderer.send('debug:log', tag, data),
   accountsList: () => ipcRenderer.invoke('accounts:list'),
   accountsAdd: (name) => ipcRenderer.invoke('accounts:add', name),
   accountsRename: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),

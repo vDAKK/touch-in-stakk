@@ -12,6 +12,9 @@
         <span class="brand-mark"></span>
         <span class="brand-name">Touch in <b>STAKK</b></span>
       </div>
+      <button id="discord" class="title-link" title="Rejoindre le Discord STAKK" aria-label="Discord STAKK">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M13.2 3.3A11 11 0 0 0 10.5 2.5l-.16.32a10 10 0 0 1 2.4.77 8.6 8.6 0 0 0-7.5 0 10 10 0 0 1 2.4-.77L7.5 2.5a11 11 0 0 0-2.7.8C2.8 6.2 2.3 9 2.5 11.8a11 11 0 0 0 3.3 1.7l.4-.6a7 7 0 0 1-1.1-.53l.27-.2a6.1 6.1 0 0 0 5.3 0l.27.2a7 7 0 0 1-1.1.53l.4.6a11 11 0 0 0 3.3-1.7c.3-3.2-.5-6-2.6-8.5ZM6.4 10.1c-.5 0-1-.5-1-1.1s.4-1.1 1-1.1 1 .5 1 1.1-.4 1.1-1 1.1Zm3.2 0c-.5 0-1-.5-1-1.1s.4-1.1 1-1.1 1 .5 1 1.1-.4 1.1-1 1.1Z"/></svg>
+      </button>
       <div class="win-controls">
         <button id="min" class="win-btn" title="Réduire" aria-label="Réduire">
           <svg viewBox="0 0 12 12" width="12" height="12"><rect x="2" y="5.5" width="8" height="1" rx="0.5" fill="currentColor"/></svg>
@@ -36,6 +39,7 @@
       <button id="update-install" class="btn-warn" hidden>Redémarrer &amp; installer</button>
     </div>
 
+    <div id="workarea">
     <nav id="tabbar">
       <div id="tabs"></div>
       <button id="add-tab" class="bar-btn" title="Ajouter un compte" aria-label="Ajouter un compte">
@@ -62,6 +66,7 @@
     </nav>
 
     <main id="views"></main>
+    </div>
 
     <div id="empty" hidden>
       <div class="empty-mark"></div>
@@ -89,6 +94,11 @@
             <input id="res-h" type="number" min="600" aria-label="Hauteur" />
           </div>
         </div>
+        <div id="res-presets" class="res-presets"></div>
+        <label class="field toggle-field" for="tabbar-side">
+          <span class="field-label">Barre d'onglets sur le côté</span>
+          <input id="tabbar-side" type="checkbox" class="switch" />
+        </label>
         <label class="field toggle-field" for="muted">
           <span class="field-label">Couper le son</span>
           <input id="muted" type="checkbox" class="switch" />
@@ -133,6 +143,15 @@
           <span class="field-label">Raccourcis clavier <span class="field-hint">(compte actif)</span></span>
         </div>
         <div id="keybinds" class="keybinds"></div>
+        <div class="field keybind-head">
+          <span class="field-label">Raccourcis du launcher <span class="field-hint">(mémo)</span></span>
+        </div>
+        <div class="shortcuts">
+          <div class="sc-row"><span>Passer d'un compte à l'autre</span><kbd>Ctrl</kbd><kbd>1</kbd>…<kbd>9</kbd></div>
+          <div class="sc-row"><span>Compte suivant / précédent</span><kbd>Ctrl</kbd><kbd>Tab</kbd></div>
+          <div class="sc-row"><span>Tous les comptes « prêt »</span><kbd>F2</kbd></div>
+          <div class="sc-row"><span>Plein écran</span><kbd>F11</kbd></div>
+        </div>
         <div class="modal-actions">
           <button id="close-settings" class="btn-ghost">Annuler</button>
           <button id="save-settings" class="btn-primary">Enregistrer</button>

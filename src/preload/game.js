@@ -148,13 +148,132 @@ function gameHook() {
     } catch (e) {}
   }
 
+  // --- Travel ("Courir ici" across maps) ------------------------------------
+  // Walk to a target map one neighbour at a time, waiting for each map to load
+  // and the character to stop between hops (the same isoEngine/actorManager
+  // fields the mule-follow already uses). Capped so a broken path can't loop
+  // forever. nextHopCell() is the one client-specific seam: run `travel-debug`
+  // in-game to confirm the map/position field names, then finalize it.
+  var TRAVEL_MAX_HOPS = 40;
+  var travelAbort = false;
+
+  function tSleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function charIdle() {
+    var am = window.actorManager;
+    return !!(am && am.userActor && !am.userActor.moving);
+  }
+  async function waitFor(pred, timeoutMs) {
+    var t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      try { if (pred()) return true; } catch (e) {}
+      await tSleep(150);
+    }
+    return false;
+  }
+
+  // From the current map, choose the border cell to step onto to move one map
+  // toward (worldX, worldY). Dofus DIRECTION bit flags: 1=E 2=S 4=W 8=N.
+  function nextHopCell(worldX, worldY) {
+    try {
+      var iso = window.isoEngine;
+      var map = iso && iso.mapRenderer && iso.mapRenderer.map;
+      var pos = window.gui && window.gui.playerData && window.gui.playerData.position;
+      if (!map || !map.cells || !pos) return null;
+      var dx = worldX - pos.worldX;
+      var dy = worldY - pos.worldY;
+      var dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 1 : 4) : (dy > 0 ? 2 : 8);
+      for (var i = 0; i < map.cells.length; i++) {
+        var c = map.cells[i];
+        if (c && (c.mapChangeData & dir)) return i;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async function travelTo(target) {
+    travelAbort = false;
+    var iso = window.isoEngine;
+    if (!iso || !iso.mapRenderer || typeof iso._movePlayerOnMap !== 'function') {
+      return emit({ type: 'travel-done', ok: false, reason: 'no-engine' });
+    }
+    for (var hop = 0; hop < TRAVEL_MAX_HOPS; hop++) {
+      if (travelAbort) return emit({ type: 'travel-done', ok: false, reason: 'aborted' });
+      if (iso.mapRenderer.mapId === target.mapId) break;
+      var cell = nextHopCell(target.worldX, target.worldY);
+      if (cell == null) return emit({ type: 'travel-done', ok: false, reason: 'no-path' });
+      var fromMap = iso.mapRenderer.mapId;
+      try { iso._movePlayerOnMap(cell, false); } catch (e) {}
+      await waitFor(function () {
+        return iso.mapRenderer.mapId !== fromMap && iso.mapRenderer.isReady;
+      }, 12000);
+      await waitFor(charIdle, 8000);
+    }
+    var arrived = iso.mapRenderer.mapId === target.mapId;
+    if (arrived && target.cellId != null) {
+      await waitFor(function () { return iso.mapRenderer.isReady && charIdle(); }, 8000);
+      try { iso._movePlayerOnMap(target.cellId, false); } catch (e) {}
+    }
+    emit({ type: 'travel-done', ok: arrived, reason: arrived ? 'arrived' : 'max-hops' });
+  }
+
+  // Report the real shape of the client objects travel depends on, so the seam
+  // above can be pinned to actual field names from an in-game session.
+  function travelDebug() {
+    try {
+      var iso = window.isoEngine, gui = window.gui;
+      var map = iso && iso.mapRenderer && iso.mapRenderer.map;
+      var pos = gui && gui.playerData && gui.playerData.position;
+      var sample = null;
+      if (map && map.cells) {
+        for (var i = 0; i < map.cells.length; i++) {
+          if (map.cells[i] && map.cells[i].mapChangeData) {
+            sample = { cellId: i, mapChangeData: map.cells[i].mapChangeData };
+            break;
+          }
+        }
+      }
+      return {
+        mapId: iso && iso.mapRenderer && iso.mapRenderer.mapId,
+        hasMovePlayer: !!(iso && iso._movePlayerOnMap),
+        mapKeys: map ? Object.keys(map).slice(0, 40) : null,
+        cellCount: map && map.cells ? map.cells.length : null,
+        sampleBorderCell: sample,
+        position: pos ? { worldX: pos.worldX, worldY: pos.worldY, mapId: pos.mapId } : null,
+        posKeys: pos ? Object.keys(pos) : null,
+      };
+    } catch (e) { return { error: String(e) }; }
+  }
+
+  // Diagnostic: the authoritative list of window ids the client actually
+  // registers, plus a check of every ACTION_WINDOW id against it — so a wrong
+  // id (an interface shortcut that silently does nothing) is obvious. Run
+  // window.stakkWindowsDebug() from an in-game account.
+  function windowsDebug() {
+    try {
+      var wm = windowsManager();
+      if (!wm) return { error: 'no-window-manager' };
+      var reg = wm.windows || wm._windows || wm.windowList || wm._windowList || null;
+      var known = reg && typeof reg === 'object' ? Object.keys(reg) : null;
+      var check = {};
+      for (var a in ACTION_WINDOW) {
+        var id = ACTION_WINDOW[a][0];
+        var w = null;
+        try { w = wm.getWindow(id); } catch (e) {}
+        check[a] = { id: id, exists: !!w };
+      }
+      return { knownWindowIds: known, mgrKeys: Object.keys(wm).slice(0, 80), actionCheck: check };
+    } catch (e) { return { error: String(e) }; }
+  }
+
   // Hide the real-money shop button from the HUD.
   var shopStyle = null;
   function setHideShop(on) {
     if (on) {
       if (shopStyle) return;
       shopStyle = document.createElement('style');
-      shopStyle.textContent = '.shopBtn, .menuIconGoultine, .menuIconGoultineAnimated { display: none !important; }';
+      // Only the floating shop toolbar + shop button — not the goultines menu
+      // icon (matches Retouch's SHOP_BUTTON_HIDE_CSS).
+      shopStyle.textContent = '.shopFloatingToolbar, .shopBtn { display: none !important; }';
       (document.head || document.documentElement).appendChild(shopStyle);
     } else if (shopStyle) {
       shopStyle.remove();
@@ -215,40 +334,78 @@ function gameHook() {
   // language files, not the script bundle.
   var entitiesSelector = null;
 
+  // Build a selector from an element's own classes, dropping volatile state
+  // classes so it still matches after the toggle flips them.
+  var STATE_CLASS = /^(active|on|off|selected|pressed|hover|disabled|hidden|open|opened|closed|show|shown|hide|hidden|enabled|checked|highlight)$/i;
   function cssPathOf(el) {
-    // Build a short, stable selector from the element's own classes.
+    if (!el || !el.tagName) return null;
     var c = el.className;
-    if (c && c.baseVal !== undefined) c = c.baseVal;
+    if (c && c.baseVal !== undefined) c = c.baseVal; // SVG className is an object
     if (typeof c === 'string' && c.trim()) {
-      return el.tagName.toLowerCase() + '.' + c.trim().split(/\s+/).join('.');
+      var classes = c.trim().split(/\s+/).filter(function (x) { return x && !STATE_CLASS.test(x); });
+      if (classes.length) return el.tagName.toLowerCase() + '.' + classes.join('.');
     }
     return null;
   }
 
-  // One-shot: the next click in the game records its target as the toggle.
+  // One-shot: the next tap in the game records its (stable-classed) target as
+  // the toggle. Uses pointerdown so it fires before the game can restyle the
+  // button, and walks up to the first ancestor that has a usable class.
   function captureEntitiesButton() {
-    var onClick = function (ev) {
-      document.removeEventListener('click', onClick, true);
-      var sel = cssPathOf(ev.target) || (ev.target.parentElement && cssPathOf(ev.target.parentElement));
-      if (sel) {
-        entitiesSelector = sel;
-        emit({ type: 'entities-selector', selector: sel });
+    var onDown = function (ev) {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('mousedown', onDown, true);
+      var node = ev.target, sel = null;
+      for (var i = 0; node && i < 4; i++, node = node.parentElement) {
+        sel = cssPathOf(node);
+        if (sel && document.querySelectorAll(sel).length === 1) break;
       }
+      entitiesSelector = sel || cssPathOf(ev.target);
+      emit({ type: 'entities-selector', selector: entitiesSelector });
+      emit({ type: 'entities-debug', phase: 'capture', selector: entitiesSelector, tag: ev.target.tagName });
     };
-    document.addEventListener('click', onClick, true);
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('mousedown', onDown, true);
   }
 
-  function clickEntitiesToggle() {
+  // Tap an element the way the touch-first client expects. Real coordinates at
+  // the element's centre matter: lindo's fixes.js turns these mouse events into
+  // touchstart/touchend, and a (0,0) event lands the touch off the button.
+  function tapElement(el) {
+    if (!el) return false;
     try {
-      if (!entitiesSelector) return false;
-      var el = document.querySelector(entitiesSelector);
-      if (!el) return false;
-      ['mousedown', 'mouseup', 'click'].forEach(function (t) {
-        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
-      });
+      var r = el.getBoundingClientRect();
+      var x = r.left + r.width / 2;
+      var y = r.top + r.height / 2;
+      var opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0 };
+      el.dispatchEvent(new MouseEvent('mousedown', opts));
+      el.dispatchEvent(new MouseEvent('mouseup', opts));
+      el.dispatchEvent(new MouseEvent('click', opts));
       return true;
     } catch (e) {}
     return false;
+  }
+
+  var entitiesShown = false;
+  function clickEntitiesToggle() {
+    // "Afficher les entités" is the client's monster-info feature: show/remove
+    // every monster-group + NPC tooltip. Drive it through the game API for a
+    // clean on/off toggle — the HUD button itself is press-and-hold, so a plain
+    // tap would only flash the tooltips on then straight back off.
+    try {
+      var fg = window.foreground;
+      if (fg && typeof fg.showAllMonsterGroupAndNpcTooltips === 'function' &&
+          typeof fg.removeAllMonsterGroupAndNpcTooltips === 'function') {
+        entitiesShown = !entitiesShown;
+        if (entitiesShown) fg.showAllMonsterGroupAndNpcTooltips();
+        else fg.removeAllMonsterGroupAndNpcTooltips();
+        var btn = document.querySelector('.monsterInfoButton');
+        if (btn) btn.classList.toggle('on', entitiesShown);
+        return true;
+      }
+    } catch (e) {}
+    // Fallback: tap the real HUD button (hold semantics), or a captured one.
+    return tapElement(document.querySelector('.monsterInfoButton') || (entitiesSelector ? document.querySelector(entitiesSelector) : null));
   }
 
   // Session gains read straight from playerData (message names vary by build).
@@ -311,18 +468,78 @@ function gameHook() {
   // Some HUD entries aren't plain windows (zaap teleport, goultines shop), so —
   // like Retouch — trigger them by clicking their menu icon, which runs the
   // game's own full flow.
+  // Each interface is opened by tapping its real HUD menu icon (touch-first
+  // client), not by guessing a window-manager id — the class names are the
+  // client's own and toggle the window exactly like a finger tap.
   var MENU_ICON = {
+    character: 'menuIconCarac',
+    spells: 'menuIconSpell',
+    inventory: 'menuIconBag',
+    quests: 'menuIconBook',
+    map: 'menuIconMap',
+    jobs: 'menuIconJob',
+    market: 'menuIconBidHouse',
+    dailyQuest: 'menuIconDailyQuest',
+    social: 'menuIconFriend',
+    guild: 'menuIconGuild',
+    alliance: 'menuIconAlliance',
+    bestiary: 'menuIconBestiary',
+    achievements: 'menuIconAchievement',
+    titles: 'menuIconTitle',
+    toa: 'menuIconTOA',
+    groupSeeker: 'menuIconGroupSeeker',
+    mount: 'menuIconMount',
     zaap: 'menuIconZaap',
     goultines: 'menuIconGoultine',
+    directory: 'menuIconDirectory',
+    conquest: 'menuIconConquest',
+    alignment: 'menuIconAlignment',
+    spouse: 'menuIconSpouse',
   };
   function clickMenuIcon(cls) {
+    tapElement(document.querySelector('.' + cls));
+  }
+
+  // Best-effort character portrait for the tab icon. The character/equipment
+  // window draws the avatar; snapshot the most avatar-shaped canvas/img inside
+  // an open window (same-origin via the local proxy, so toDataURL is untainted)
+  // and crop a square from the top (the head). Returns a 40px PNG data URL, or
+  // null when nothing suitable is rendered yet — the host then keeps the dot.
+  function capturePortrait() {
     try {
-      var el = document.querySelector('.' + cls);
-      if (!el) return;
-      ['mousedown', 'mouseup', 'click'].forEach(function (t) {
-        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
-      });
-    } catch (e) {}
+      var best = null, bestArea = 0;
+      var nodes = document.querySelectorAll('canvas, img');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        var r = el.getBoundingClientRect();
+        if (r.width < 40 || r.height < 40) continue;
+        // Ignore the full-window game canvas; we want a UI-sized avatar.
+        if (r.width > window.innerWidth * 0.9 && r.height > window.innerHeight * 0.9) continue;
+        var area = r.width * r.height;
+        if (area > bestArea) { best = el; bestArea = area; }
+      }
+      if (!best) return null;
+      var sw = best.naturalWidth || best.width;
+      var sh = best.naturalHeight || best.height;
+      if (!sw || !sh) return null;
+      var side = Math.min(sw, sh);
+      var out = document.createElement('canvas');
+      out.width = 40; out.height = 40;
+      var ctx = out.getContext('2d');
+      ctx.drawImage(best, (sw - side) / 2, 0, side, side, 0, 0, 40, 40);
+      // Reject a blank capture (a WebGL canvas without preserveDrawingBuffer
+      // reads back transparent); getImageData also throws if tainted -> null.
+      var data = ctx.getImageData(0, 0, 40, 40).data;
+      var opaque = 0;
+      for (var p = 3; p < data.length; p += 4) if (data[p] > 16) opaque++;
+      if (opaque < 40) return null;
+      return out.toDataURL('image/png');
+    } catch (e) { return null; }
+  }
+
+  function tryEmitPortrait() {
+    var d = capturePortrait();
+    if (d) emit({ type: 'portrait', dataUrl: d });
   }
 
   // Open the window the same way the game's menu button does (no forceToOpen —
@@ -330,6 +547,9 @@ function gameHook() {
   function doAction(action) {
     if (MENU_ICON[action]) {
       clickMenuIcon(MENU_ICON[action]);
+      // Grab the avatar once the character/inventory panel has rendered: the
+      // "capture from the inventory" moment.
+      if (action === 'character' || action === 'inventory') setTimeout(tryEmitPortrait, 900);
       return;
     }
     if (action === 'entities') {
@@ -410,6 +630,16 @@ function gameHook() {
       emit({ type: 'position', mapId: pos.mapId, cellId: pos.cellId });
     } else if (p.type === 'mule-follow') {
       muleFollow(p.mapId, p.cellId);
+    } else if (p.type === 'capture-portrait') {
+      tryEmitPortrait();
+    } else if (p.type === 'travel') {
+      travelTo(p.target || {});
+    } else if (p.type === 'travel-cancel') {
+      travelAbort = true;
+    } else if (p.type === 'travel-debug') {
+      emit({ type: 'travel-debug', data: travelDebug() });
+    } else if (p.type === 'windows-debug') {
+      emit({ type: 'windows-debug', data: windowsDebug() });
     }
   });
 
@@ -425,6 +655,11 @@ function gameHook() {
       var ci = gui.playerData && gui.playerData.characterBaseInformations;
       if (ci) emit({ type: 'identity', name: ci.name, id: gui.playerData.id });
     } catch (e) {}
+
+    // One-shot: report the client's real window ids to app.log so wrong
+    // ACTION_WINDOW ids (dead interface shortcuts) can be corrected. Delayed so
+    // the window manager is populated. Remove once ACTION_WINDOW is verified.
+    setTimeout(function () { emit({ type: 'windows-debug', data: windowsDebug() }); }, 2500);
 
     // A fighter's turn started. For our own character the fighter id equals the
     // player id, so tell the host it is this account's turn.
@@ -442,6 +677,10 @@ function gameHook() {
         if (autoAcceptGroup || (expectInviteFrom && msg.fromName === expectInviteFrom)) {
           send('PartyAcceptInvitationMessage', { partyId: msg.partyId });
           expectInviteFrom = null;
+        } else {
+          // A group invite the user has to answer: surface it so a background
+          // tab still gets noticed.
+          emit({ type: 'party-invite', from: msg.fromName });
         }
       } catch (e) {}
     });
@@ -473,6 +712,10 @@ function gameHook() {
       try {
         if (autoAccept && msg && ownIds[msg.sourceId]) {
           send('GameRolePlayPlayerFightFriendlyAnswerMessage', { fightId: msg.fightId, accept: true });
+        } else if (msg && !ownIds[msg.sourceId]) {
+          // A challenge from someone who isn't one of the user's own accounts:
+          // notify instead of silently auto-accepting.
+          emit({ type: 'challenge-invite', from: msg.sourceName || msg.sourceId });
         }
       } catch (e) {}
     });
@@ -546,11 +789,88 @@ function isTyping() {
   return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
 }
 
+// Tap a DOM element at its centre with real coordinates (fixes.js turns these
+// into touch events on the touch-first client).
+function tapDomAt(el) {
+  if (!el) return false;
+  try {
+    const r = el.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+    el.dispatchEvent(new MouseEvent('mousedown', o));
+    el.dispatchEvent(new MouseEvent('mouseup', o));
+    el.dispatchEvent(new MouseEvent('click', o));
+    return true;
+  } catch (e) { return false; }
+}
+
+// Physical keyboard -> the client's on-screen number pad. Detected structurally
+// (most of 0-9 as leaf buttons AND a validate/clear button) so it needs no
+// class names, can't false-match an item grid, and only fires when the pad is
+// actually open — otherwise digits stay free for spell shortcuts.
+function findNumpad() {
+  const nodes = document.querySelectorAll('div,button,span,a,td');
+  const digits = {};
+  let count = 0, enter = null, clr = null;
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    if (el.children.length) continue;
+    const t = (el.textContent || '').trim();
+    if (!t || t.length > 8) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 12 || r.height < 12) continue;
+    if (/^[0-9]$/.test(t)) { if (!digits[t]) { digits[t] = el; count++; } }
+    else if (/enter|valider|^ok$|✓/i.test(t)) { enter = enter || el; }
+    else if (/^(clr|clear|effacer)$/i.test(t)) { clr = clr || el; }
+  }
+  return count >= 9 && (enter || clr) ? { digits, enter, clr } : null;
+}
+function routeNumpad(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey) return false;
+  const isDigit = /^[0-9]$/.test(e.key);
+  if (!isDigit && e.key !== 'Enter') return false;
+  const pad = findNumpad();
+  if (!pad) return false;
+  if (isDigit && pad.digits[e.key]) return tapDomAt(pad.digits[e.key]);
+  if (e.key === 'Enter' && pad.enter) return tapDomAt(pad.enter);
+  return false;
+}
+
+// Enter validates the active confirmation / action popup (sell, buy, yes/no…).
+// The client's primary button carries one of these classes and reacts to a tap;
+// pick the last visible, enabled one (the top-most popup) and tap it.
+function tapConfirmButton() {
+  const sels = ['.yesButton', '.confirmButton', '.validateButton', '.okButton'];
+  for (let s = 0; s < sels.length; s++) {
+    const els = document.querySelectorAll(sels[s]);
+    let best = null;
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+      if (/(^|\s)(disabled|disable|greyed|spinner)(\s|$)/.test(el.className || '')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) best = el;
+    }
+    if (best) return tapDomAt(best);
+  }
+  return false;
+}
+
 // Reserved launcher hotkeys. This preload sees keydown even while the game has
 // focus, so forward our shortcuts to the host and stop the game from also acting.
 window.addEventListener(
   'keydown',
   (e) => {
+    // Type into the on-screen number pad with the physical keyboard.
+    if (routeNumpad(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    // Enter confirms the active popup (Vendre, Acheter, Oui…), unless typing.
+    if (e.key === 'Enter' && !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping() && tapConfirmButton()) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     let hk = null;
     if (e.key === 'F2' && !e.ctrlKey && !e.altKey) hk = { name: 'ready-all' };
     else if (e.ctrlKey && e.key >= '1' && e.key <= '9') hk = { name: 'switch', index: Number(e.key) - 1 };

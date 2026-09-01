@@ -6,6 +6,7 @@ let settings = null;
 let accounts = [];
 let activeId = null;
 const identities = {}; // accountId -> { name, id } reported by each game hook
+const portraits = {}; // accountId -> data URL of the captured character portrait
 const sessionStats = {}; // accountId -> { xp, kamas } gained since launch
 
 // In-game actions the launcher can trigger (the touch client has no native
@@ -33,6 +34,10 @@ const KEYBIND_ACTIONS = [
   { id: 'goultines', label: 'Boutique (goultines)', defaultKey: 'x' },
   { id: 'options', label: 'Options', defaultKey: 'o' },
   { id: 'mount', label: 'Monture', defaultKey: 'p' },
+  { id: 'directory', label: 'Annuaire', defaultKey: 'e' },
+  { id: 'conquest', label: 'Conquête (AvA)', defaultKey: 'l' },
+  { id: 'alignment', label: 'Alignement', defaultKey: 'u' },
+  { id: 'spouse', label: 'Conjoint', defaultKey: 'v' },
   { id: 'entities', label: 'Afficher les entités', defaultKey: 'z' },
   { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
   { id: 'spell1', label: 'Sort 1', defaultKey: '1' },
@@ -48,6 +53,67 @@ const KEYBIND_ACTIONS = [
 $('min').onclick = () => window.touch.windowMinimize();
 $('max').onclick = () => window.touch.windowToggleMaximize();
 $('close').onclick = () => window.touch.windowClose();
+
+// Community link. Replace with your own invite; opened in the default browser
+// (main restricts app:open-external to https).
+const STAKK_DISCORD_URL = 'https://discord.gg/your-invite';
+$('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
+
+// Quick window-size presets, kept on the game's 1440/800 aspect ratio so the
+// view never letterboxes. Clicking one fills the width/height inputs; the user
+// still confirms with Enregistrer.
+const RESOLUTION_PRESETS = [
+  { label: 'Compact', width: 1152, height: 640 },
+  { label: 'Défaut', width: 1440, height: 800 },
+  { label: 'Large', width: 1600, height: 889 },
+  { label: 'XL', width: 1920, height: 1067 },
+];
+function renderPresets() {
+  const box = $('res-presets');
+  box.innerHTML = '';
+  for (const p of RESOLUTION_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'preset-btn';
+    b.textContent = p.label + ' · ' + p.width + '×' + p.height;
+    b.onclick = () => {
+      $('res-w').value = p.width;
+      $('res-h').value = p.height;
+      markActivePreset();
+    };
+    box.appendChild(b);
+  }
+}
+function markActivePreset() {
+  const w = Number($('res-w').value);
+  const h = Number($('res-h').value);
+  for (const b of $('res-presets').children) {
+    const p = RESOLUTION_PRESETS.find((x) => x.label + ' · ' + x.width + '×' + x.height === b.textContent);
+    b.classList.toggle('active', !!p && p.width === w && p.height === h);
+  }
+}
+
+// Tab bar on top (default) or down the left side, per the user's choice.
+function applyTabBarSide(on) {
+  document.body.classList.toggle('side-tabs', !!on);
+}
+
+// Travel controls, exposed for now on the active account (a world-map click
+// hook is the last-mile UI). window.stakkTravelDebug() prints the real client
+// field names in-game so the travel seam can be finalized.
+window.stakkTravel = (mapId, worldX, worldY, cellId) => {
+  if (activeId) sendToView(activeId, { type: 'travel', target: { mapId, worldX, worldY, cellId } });
+};
+window.stakkTravelCancel = () => {
+  if (activeId) sendToView(activeId, { type: 'travel-cancel' });
+};
+window.stakkTravelDebug = () => {
+  if (activeId) sendToView(activeId, { type: 'travel-debug' });
+};
+// Prints the client's real window ids + which interface shortcuts are broken.
+window.stakkWindowsDebug = () => {
+  if (activeId) sendToView(activeId, { type: 'windows-debug' });
+};
 
 $('add-tab').onclick = addAccount;
 $('add-first').onclick = addAccount;
@@ -155,6 +221,7 @@ const accountColor = (id) => TAB_COLORS[(id - 1) % TAB_COLORS.length];
 async function init() {
   await refreshPatchStatus();
   settings = await window.touch.getSettings();
+  applyTabBarSide(settings.tabBarSide);
   gameUrl = await window.touch.getGameUrl();
   gamePreloadUrl = await window.touch.getGamePreloadUrl();
   const res = await window.touch.accountsList();
@@ -222,9 +289,17 @@ function renderTabs() {
       reorder(Number(e.dataTransfer.getData('text/plain')), a.id);
     });
 
-    const dot = document.createElement('span');
-    dot.className = 'tab-dot';
-    dot.style.background = accountColor(a.id);
+    let icon;
+    if (portraits[a.id]) {
+      icon = document.createElement('img');
+      icon.className = 'tab-portrait';
+      icon.src = portraits[a.id];
+      icon.alt = '';
+    } else {
+      icon = document.createElement('span');
+      icon.className = 'tab-dot';
+      icon.style.background = accountColor(a.id);
+    }
 
     const label = document.createElement('span');
     label.className = 'tab-label';
@@ -240,7 +315,7 @@ function renderTabs() {
       removeTab(a);
     };
 
-    tab.append(dot, label, close);
+    tab.append(icon, label, close);
     box.appendChild(tab);
   }
 }
@@ -289,6 +364,29 @@ function handleQol(accountId, msg) {
     pulseTab(accountId);
   } else if (msg.type === 'whisper') {
     notify(accountId, 'Message privé de ' + (msg.from || '?'));
+  } else if (msg.type === 'party-invite') {
+    notify(accountId, 'Invitation de groupe de ' + (msg.from || '?'));
+  } else if (msg.type === 'challenge-invite') {
+    notify(accountId, 'Défi en combat de ' + (msg.from || '?'));
+  } else if (msg.type === 'portrait') {
+    if (msg.dataUrl) {
+      portraits[accountId] = msg.dataUrl;
+      renderTabs();
+    }
+  } else if (msg.type === 'travel-done') {
+    notify(accountId, msg.ok ? 'Arrivé à destination' : 'Voyage interrompu (' + (msg.reason || '?') + ')');
+  } else if (msg.type === 'travel-debug') {
+    // Printed so an in-game session can reveal the real client field names used
+    // by the travel seam (nextHopCell) before finalizing it.
+    console.log('[travel-debug] account', accountId, msg.data);
+    window.touch.logDebug('[travel-debug]', msg.data);
+  } else if (msg.type === 'windows-debug') {
+    // Prints the real window ids the client registers + which ACTION_WINDOW ids
+    // are invalid, so broken interface shortcuts can be pinned to correct ids.
+    console.log('[windows-debug] account', accountId, JSON.stringify(msg.data, null, 2));
+    window.touch.logDebug('[windows-debug]', msg.data);
+  } else if (msg.type === 'entities-debug') {
+    window.touch.logDebug('[entities-debug]', msg);
   } else if (msg.type === 'disconnected') {
     notify(accountId, 'Déconnecté du jeu');
   }
@@ -613,6 +711,11 @@ async function openSettings() {
   const s = await window.touch.getSettings();
   $('res-w').value = s.resolution.width;
   $('res-h').value = s.resolution.height;
+  renderPresets();
+  markActivePreset();
+  $('res-w').oninput = markActivePreset;
+  $('res-h').oninput = markActivePreset;
+  $('tabbar-side').checked = !!s.tabBarSide;
   $('muted').checked = s.muted;
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
@@ -631,6 +734,7 @@ async function saveSettings() {
   const muted = $('muted').checked;
   settings = await window.touch.setSettings({
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
+    tabBarSide: $('tabbar-side').checked,
     muted,
     switchOnTurn: $('switch-on-turn').checked,
     notifications: $('notifications').checked,
@@ -646,6 +750,7 @@ async function saveSettings() {
     const wv = document.getElementById(viewId(a.id));
     if (wv && wv.setAudioMuted) wv.setAudioMuted(muted);
   }
+  applyTabBarSide(settings.tabBarSide);
   pushKeybinds();
   pushOwnAccounts();
   broadcastToAll({ type: 'no-confirm', on: !!settings.noConfirm });
