@@ -1,4 +1,11 @@
 const { app, BrowserWindow, ipcMain, session, shell, webContents } = require('electron');
+
+// Same reason as backgroundThrottling below, at the process level: without
+// these Chromium still freezes timers and rendering for occluded/background
+// pages, so an unfocused account stops moving.
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -163,6 +170,10 @@ async function boot() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
+      // Chromium throttles timers and rendering in background windows, which
+      // stalls anything time-based in the game (travel hops, follow, timers)
+      // whenever the launcher is not focused.
+      backgroundThrottling: false,
     },
   });
 

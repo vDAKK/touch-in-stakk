@@ -107,6 +107,11 @@ window.stakkTravel = (mapId, worldX, worldY, cellId) => {
 window.stakkTravelCancel = () => {
   if (activeId) sendToView(activeId, { type: 'travel-cancel' });
 };
+// Run code inside the active account's game world. Avoids relaunching (and
+// re-authenticating) the client just to inspect something.
+window.stakkEval = (code) => {
+  if (activeId) sendToView(activeId, { type: 'eval', code: String(code) });
+};
 window.stakkTravelDebug = () => {
   if (activeId) sendToView(activeId, { type: 'travel-debug' });
 };
@@ -246,6 +251,9 @@ async function createView(account) {
   wv.setAttribute('partition', partition);
   wv.setAttribute('allowpopups', '');
   wv.setAttribute('preload', gamePreloadUrl);
+  // Keep the game running while its tab is not the active one: without this
+  // Chromium throttles the inactive webviews' timers.
+  wv.setAttribute('webpreferences', 'backgroundThrottling=false');
   wv.setAttribute('src', gameUrl);
   wv.classList.add('inactive');
   wv.addEventListener('dom-ready', () => {
@@ -373,11 +381,25 @@ function handleQol(accountId, msg) {
       portraits[accountId] = msg.dataUrl;
       renderTabs();
     }
+  } else if (msg.type === 'travel-hook') {
+    console.log('[travel] right-click hook installed on world map');
+  } else if (msg.type === 'travel-started') {
+    console.log('[travel] going to ' + msg.x + ',' + msg.y);
+    notify(accountId, 'Voyage vers ' + msg.x + ',' + msg.y);
+  } else if (msg.type === 'travel-replan') {
+    console.log('[travel] replan from ' + msg.x + ',' + msg.y + ' (' + msg.steps + ' steps)');
+  } else if (msg.type === 'travel-plan') {
+    console.log('[travel] plan ' + msg.steps + ' steps from ' + msg.x + ',' + msg.y);
+  } else if (msg.type === 'travel-progress') {
+    // Each hop, so a stalled trip shows where it stopped.
+    console.log('[travel] ' + msg.x + ',' + msg.y + ' (hop ' + msg.hop + ')');
   } else if (msg.type === 'travel-done') {
-    notify(accountId, msg.ok ? 'Arrivé à destination' : 'Voyage interrompu (' + (msg.reason || '?') + ')');
+    var where = msg.x != null ? ' à ' + msg.x + ',' + msg.y : '';
+    console.log('[travel] done ok=' + msg.ok + ' reason=' + msg.reason + where);
+    notify(accountId, msg.ok ? 'Arrivé à destination' : 'Voyage interrompu (' + (msg.reason || '?') + ')' + where);
+  } else if (msg.type === 'eval-result') {
+    console.log('[eval]', msg.data);
   } else if (msg.type === 'travel-debug') {
-    // Printed so an in-game session can reveal the real client field names used
-    // by the travel seam (nextHopCell) before finalizing it.
     console.log('[travel-debug] account', accountId, msg.data);
     window.touch.logDebug('[travel-debug]', msg.data);
   } else if (msg.type === 'windows-debug') {

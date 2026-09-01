@@ -149,12 +149,20 @@ function gameHook() {
   }
 
   // --- Travel ("Courir ici" across maps) ------------------------------------
-  // Walk to a target map one neighbour at a time, waiting for each map to load
-  // and the character to stop between hops (the same isoEngine/actorManager
-  // fields the mule-follow already uses). Capped so a broken path can't loop
-  // forever. nextHopCell() is the one client-specific seam: run `travel-debug`
-  // in-game to confirm the map/position field names, then finalize it.
-  var TRAVEL_MAX_HOPS = 40;
+  // Walk to a target map by world coordinates, one neighbour map at a time.
+  //
+  // All the hard parts are the client's own: getChangeMapFlags(cellId) marks
+  // which cells exit toward which neighbour, and gotoNeighbourMap() walks to
+  // such a cell (via the client pathfinder, so obstacles are handled) and fires
+  // the map change on arrival. We only decide the direction each hop and wait
+  // for the map to settle. Capped so a broken path cannot loop forever.
+  var TRAVEL_MAX_HOPS = 60;
+  var EXIT_CELLS_TRIED = 5;      // fallback ladder outward from the best cell
+  var EXIT_CELL_RETRIES = 3;     // the server sometimes refuses a valid crossing
+  var CROSS_POLL_MS = 150;
+  var CROSS_IDLE_FAIL_MS = 1000; // stopped moving, map unchanged -> refused
+  var CROSS_RETRY_DELAY_MS = 1000;
+  var CROSS_TIMEOUT_MS = 15000;
   var travelAbort = false;
 
   function tSleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -171,77 +179,555 @@ function gameHook() {
     return false;
   }
 
-  // From the current map, choose the border cell to step onto to move one map
-  // toward (worldX, worldY). Dofus DIRECTION bit flags: 1=E 2=S 4=W 8=N.
-  function nextHopCell(worldX, worldY) {
+  // Current map coordinates on the world grid. posY grows southward.
+  function mapCoords() {
     try {
-      var iso = window.isoEngine;
-      var map = iso && iso.mapRenderer && iso.mapRenderer.map;
-      var pos = window.gui && window.gui.playerData && window.gui.playerData.position;
-      if (!map || !map.cells || !pos) return null;
-      var dx = worldX - pos.worldX;
-      var dy = worldY - pos.worldY;
-      var dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 1 : 4) : (dy > 0 ? 2 : 8);
-      for (var i = 0; i < map.cells.length; i++) {
-        var c = map.cells[i];
-        if (c && (c.mapChangeData & dir)) return i;
+      var c = window.gui.playerData.position.coordinates;
+      return c && c.posX != null ? { x: c.posX, y: c.posY } : null;
+    } catch (e) { return null; }
+  }
+
+  // Cells that exit the current map toward `dir`, nearest first from the
+  // player's cell. Uses the client's own border flags — cell objects only carry
+  // an `l` bitfield, the exit data lives in getChangeMapFlags(cellId).
+  // --- World pathfinding -----------------------------------------------------
+  // A* over map coordinates. Whether a coordinate holds a real map is answered
+  // by the client itself (getSubAreaAtGridCoordinate): the raw coordinate table
+  // is sparse and the client fills its gaps by walking backwards, so asking it
+  // is the only reliable test. Routing this way goes around water, walls and
+  // dead ends instead of walking blindly along the dominant axis.
+  var _subAreaCache = {};
+
+  function subAreaAt(x, y) {
+    var k = x + ',' + y;
+    if (k in _subAreaCache) return _subAreaCache[k];
+    var v = null;
+    try {
+      var m = worldMapView();
+      if (m && typeof m.getSubAreaAtGridCoordinate === 'function') {
+        var r = m.getSubAreaAtGridCoordinate(x, y);
+        v = r ? (r.id != null ? r.id : true) : null;
       }
     } catch (e) {}
+    _subAreaCache[k] = v;
+    return v;
+  }
+
+  function mapExists(x, y) { return subAreaAt(x, y) != null; }
+
+  var PATH_MAX_NODES = 6000;
+  var PATH_MAX_SPREAD = 40; // don't wander further than this off the bounding box
+
+  function findWorldPath(sx, sy, tx, ty) {
+    if (sx === tx && sy === ty) return [];
+    if (!mapExists(tx, ty)) return null;
+
+    var key = function (x, y) { return x + ',' + y; };
+    var startK = key(sx, sy), goalK = key(tx, ty);
+    var open = [{ x: sx, y: sy, g: 0, f: Math.abs(tx - sx) + Math.abs(ty - sy) }];
+    var came = {}, gScore = {};
+    gScore[startK] = 0;
+    // Keep the search inside a padded box around start/goal: without it a
+    // blocked route would crawl over the entire world.
+    var minX = Math.min(sx, tx) - PATH_MAX_SPREAD, maxX = Math.max(sx, tx) + PATH_MAX_SPREAD;
+    var minY = Math.min(sy, ty) - PATH_MAX_SPREAD, maxY = Math.max(sy, ty) + PATH_MAX_SPREAD;
+    var seen = 0;
+
+    while (open.length && seen++ < PATH_MAX_NODES) {
+      var bi = 0;
+      for (var i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      var cur = open.splice(bi, 1)[0];
+      var curK = key(cur.x, cur.y);
+
+      if (curK === goalK) {
+        var path = [], k = goalK;
+        while (k !== startK) {
+          var c = came[k];
+          if (!c) return null;
+          path.unshift({ x: c.x, y: c.y });
+          k = c.from;
+        }
+        return path;
+      }
+
+      var neigh = [
+        { x: cur.x + 1, y: cur.y }, { x: cur.x - 1, y: cur.y },
+        { x: cur.x, y: cur.y + 1 }, { x: cur.x, y: cur.y - 1 },
+      ];
+      for (var n = 0; n < neigh.length; n++) {
+        var nx = neigh[n].x, ny = neigh[n].y;
+        if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
+        if (!mapExists(nx, ny)) continue;
+        if (edgeBlocked(cur.x, cur.y, dirBetween(cur.x, cur.y, nx, ny))) continue;
+        var nk = key(nx, ny), tentative = cur.g + 1;
+        if (gScore[nk] != null && tentative >= gScore[nk]) continue;
+        gScore[nk] = tentative;
+        came[nk] = { from: curK, x: nx, y: ny };
+        open.push({ x: nx, y: ny, g: tentative,
+                    f: tentative + Math.abs(tx - nx) + Math.abs(ty - ny) });
+      }
+    }
     return null;
+  }
+
+  // Edges the client declares as neighbours but that cannot actually be walked
+  // (no border exit cell: a wall, cliff or non-standard transition). Learned at
+  // run time and fed back into A* so a replan routes around them.
+  var blockedEdges = {};
+  function edgeKey(x, y, dir) { return x + ',' + y + '>' + dir; }
+  function markEdgeBlocked(x, y, dir) { blockedEdges[edgeKey(x, y, dir)] = true; }
+  function edgeBlocked(x, y, dir) { return !!blockedEdges[edgeKey(x, y, dir)]; }
+
+  function dirBetween(fx, fy, tx, ty) {
+    if (tx > fx) return 'right';
+    if (tx < fx) return 'left';
+    if (ty > fy) return 'bottom';
+    if (ty < fy) return 'top';
+    return null;
+  }
+
+  // Record, for the map we are standing on, which declared neighbours have no
+  // usable border exit. Doing this on arrival means A* plans with real data
+  // instead of discovering walls by walking into them. Only runs on a fully
+  // loaded map: a premature scan would wrongly blacklist every direction.
+  function learnCurrentMapEdges() {
+    try {
+      var mr = window.isoEngine.mapRenderer;
+      var here = mapCoords();
+      if (!here || !mr.map || !mr.map.cells || !mr.isReady) return;
+      ['top', 'bottom', 'left', 'right'].forEach(function (dir) {
+        if (!mr.map[dir + 'NeighbourId']) {
+          markEdgeBlocked(here.x, here.y, dir);   // no neighbour at all
+        } else if (!exitCells(dir).length) {
+          markEdgeBlocked(here.x, here.y, dir);   // neighbour declared, no way through
+        }
+      });
+    } catch (e) {}
+  }
+
+  // Exit cells toward `dir`, best candidate first.
+  //
+  // A border's transition cells are not one contiguous block: walls split them
+  // into several runs, and the index stride between neighbours on the same
+  // border differs per direction (a full row apart for left/right, adjacent for
+  // top/bottom on the 14-wide grid). So infer the stride from the most common
+  // gap, group the cells into runs at that stride, take the longest run — the
+  // widest opening — and aim at its middle, which is the least likely to be
+  // blocked. The rest follow, ordered outward, as fallbacks.
+  function exitCells(dir) {
+    try {
+      var mr = window.isoEngine.mapRenderer;
+      var fn = mr.getChangeMapFlags || Object.getPrototypeOf(mr).getChangeMapFlags;
+      if (typeof fn !== 'function' || !mr.map || !mr.map.cells) return [];
+
+      var cand = [];
+      for (var i = 0; i < mr.map.cells.length; i++) {
+        var cell = mr.map.cells[i];
+        if (!cell || !(cell.l & 1)) continue;      // must be walkable to be reachable
+        var f = fn.call(mr, i);
+        if (f && f[dir]) cand.push(i);
+      }
+      if (cand.length < 2) return cand;
+      cand.sort(function (a, b) { return a - b; });
+
+      var counts = {}, stride = cand[1] - cand[0], best = 0;
+      for (var d = 1; d < cand.length; d++) {
+        var gap = cand[d] - cand[d - 1];
+        counts[gap] = (counts[gap] || 0) + 1;
+        if (counts[gap] > best) { best = counts[gap]; stride = gap; }
+      }
+
+      var runs = [], run = [cand[0]];
+      for (var j = 1; j < cand.length; j++) {
+        if (cand[j] - run[run.length - 1] === stride) run.push(cand[j]);
+        else { runs.push(run); run = [cand[j]]; }
+      }
+      runs.push(run);
+
+      var longest = runs[0];
+      for (var r = 1; r < runs.length; r++) if (runs[r].length > longest.length) longest = runs[r];
+      var mid = longest[Math.floor(longest.length / 2)];
+
+      cand.sort(function (a, b) { return Math.abs(a - mid) - Math.abs(b - mid); });
+      return cand;
+    } catch (e) { return []; }
+  }
+
+  // Directions to try this hop, best first: the larger coordinate gap leads,
+  // and the perpendicular axis is the fallback when a border has no exit.
+  function hopDirections(dx, dy) {
+    var h = dx > 0 ? 'right' : dx < 0 ? 'left' : null;
+    var v = dy > 0 ? 'bottom' : dy < 0 ? 'top' : null;
+    var dirs = Math.abs(dx) >= Math.abs(dy) ? [h, v] : [v, h];
+    return dirs.filter(Boolean);
+  }
+
+  // One hop toward the target. Returns true if the map actually changed.
+  //
+  // gotoNeighbourMap() only sends the map change if the character lands exactly
+  // on the requested cell (its arrival callback checks that), so a blocked or
+  // unreachable exit silently walks and stops. Worse, a border cell the server
+  // rejects rolls the character back to where it started. So: try each exit
+  // cell, confirm the map really changed, and move on to the next one if not.
+  async function hopToward(dx, dy) {
+    var iso = window.isoEngine;
+    var dirs = hopDirections(dx, dy);
+    var here = mapCoords();
+    for (var i = 0; i < dirs.length; i++) {
+      var dir = dirs[i];
+      var neighbourId = iso.mapRenderer.map[dir + 'NeighbourId'];
+      // No neighbour registered that way — don't bother walking to the border.
+      if (!neighbourId) continue;
+      var cells = exitCells(dir);
+
+      // Declared neighbour with no border exit at all: a wall, a cliff or a
+      // non-standard transition. Ask the server directly once — it refuses if
+      // the move is not legal — then remember the edge so A* routes around it.
+      if (!cells.length) {
+        var fromDirect = iso.mapRenderer.mapId;
+        try { iso._requestMapChange(neighbourId, dir); } catch (e) {}
+        var jumped = await waitFor(function () {
+          return iso.mapRenderer.mapId !== fromDirect && iso.mapRenderer.isReady;
+        }, 6000);
+        if (jumped) { await waitFor(charIdle, 8000); return true; }
+        if (here) markEdgeBlocked(here.x, here.y, dir);
+        continue;
+      }
+
+      for (var j = 0; j < cells.length && j < EXIT_CELLS_TRIED; j++) {
+        for (var attempt = 0; attempt < EXIT_CELL_RETRIES; attempt++) {
+          if (travelAbort) return false;
+
+          // Never stack a request on top of a transition still in flight.
+          await waitFor(function () {
+            return iso.mapRenderer.isReady && !iso.isMapChanging && !iso.changeMapTimeout;
+          }, 10000);
+
+          var fromMap = iso.mapRenderer.mapId;
+          try { iso.gotoNeighbourMap(dir, cells[j], 0, 0); } catch (e) { break; }
+
+          // Poll for the crossing. A character that stops moving without the
+          // map having changed means the walk finished but the transition was
+          // refused — detect that instead of waiting out the full timeout.
+          var t0 = Date.now(), idleSince = null, crossed = false;
+          while (Date.now() - t0 < CROSS_TIMEOUT_MS) {
+            if (travelAbort) return false;
+            if (iso.mapRenderer.mapId !== fromMap) { crossed = true; break; }
+            if (charIdle()) {
+              if (idleSince === null) idleSince = Date.now();
+              else if (Date.now() - idleSince >= CROSS_IDLE_FAIL_MS) break;
+            } else {
+              idleSince = null;
+            }
+            await tSleep(CROSS_POLL_MS);
+          }
+
+          if (crossed) {
+            // Let the new map finish loading and the character settle before
+            // the next hop, or the following move lands on a half-loaded map.
+            await waitFor(function () { return iso.mapRenderer.isReady; }, 8000);
+            await waitFor(charIdle, 8000);
+            return true;
+          }
+          await tSleep(CROSS_RETRY_DELAY_MS);
+        }
+      }
+      // Every exit in this direction failed: don't plan through it again.
+      if (here) markEdgeBlocked(here.x, here.y, dir);
+    }
+    return false;
   }
 
   async function travelTo(target) {
     travelAbort = false;
     var iso = window.isoEngine;
-    if (!iso || !iso.mapRenderer || typeof iso._movePlayerOnMap !== 'function') {
+    if (!iso || !iso.mapRenderer || typeof iso.gotoNeighbourMap !== 'function') {
       return emit({ type: 'travel-done', ok: false, reason: 'no-engine' });
     }
-    for (var hop = 0; hop < TRAVEL_MAX_HOPS; hop++) {
-      if (travelAbort) return emit({ type: 'travel-done', ok: false, reason: 'aborted' });
-      if (iso.mapRenderer.mapId === target.mapId) break;
-      var cell = nextHopCell(target.worldX, target.worldY);
-      if (cell == null) return emit({ type: 'travel-done', ok: false, reason: 'no-path' });
-      var fromMap = iso.mapRenderer.mapId;
-      try { iso._movePlayerOnMap(cell, false); } catch (e) {}
-      await waitFor(function () {
-        return iso.mapRenderer.mapId !== fromMap && iso.mapRenderer.isReady;
-      }, 12000);
-      await waitFor(charIdle, 8000);
+    if (target.worldX == null || target.worldY == null) {
+      return emit({ type: 'travel-done', ok: false, reason: 'no-target' });
     }
-    var arrived = iso.mapRenderer.mapId === target.mapId;
+
+    var here = mapCoords();
+    if (!here) return emit({ type: 'travel-done', ok: false, reason: 'no-position' });
+
+    // Plan a real route first: A* over the world coordinate table routes around
+    // water and dead ends that a greedy axis walk would get stuck against.
+    // The coordinate lookup lives on the world map view, which only exists once
+    // that window has been opened. Without it there is no route to plan.
+    if (!worldMapView()) {
+      return emit({ type: 'travel-done', ok: false, reason: 'open-world-map-first' });
+    }
+    learnCurrentMapEdges();
+    var route = findWorldPath(here.x, here.y, target.worldX, target.worldY);
+    if (route === null) {
+      return emit({ type: 'travel-done', ok: false,
+                    reason: mapExists(target.worldX, target.worldY) ? 'no-route' : 'no-such-map' });
+    }
+    emit({ type: 'travel-plan', steps: route.length, x: here.x, y: here.y });
+
+    var stuck = 0, replans = 0;
+    for (var step = 0; step < route.length && step < TRAVEL_MAX_HOPS; step++) {
+      if (travelAbort) return emit({ type: 'travel-done', ok: false, reason: 'aborted' });
+      await waitFor(function () { return iso.mapRenderer.isReady; }, 10000);
+
+      var c = mapCoords();
+      if (!c) return emit({ type: 'travel-done', ok: false, reason: 'no-position' });
+      if (c.x === target.worldX && c.y === target.worldY) break;
+
+      var want = route[step];
+      var dx = want.x - c.x, dy = want.y - c.y;
+      // Drifted off the plan (server moved us, or a hop overshot): replan.
+      if (Math.abs(dx) + Math.abs(dy) !== 1) {
+        var again = findWorldPath(c.x, c.y, target.worldX, target.worldY);
+        if (!again || !again.length) {
+          return emit({ type: 'travel-done', ok: false, reason: 'no-route', x: c.x, y: c.y });
+        }
+        route = again; step = -1;
+        continue;
+      }
+
+      if (!(await hopToward(dx, dy))) {
+        // hopToward has just recorded why this edge failed; replan around it.
+        var detour = findWorldPath(c.x, c.y, target.worldX, target.worldY);
+        if (!detour || !detour.length) {
+          return emit({ type: 'travel-done', ok: false, reason: 'blocked', x: c.x, y: c.y });
+        }
+        if (++replans > 8) {
+          return emit({ type: 'travel-done', ok: false, reason: 'blocked', x: c.x, y: c.y });
+        }
+        emit({ type: 'travel-replan', x: c.x, y: c.y, steps: detour.length });
+        route = detour; step = -1;
+        continue;
+      }
+
+      var after = mapCoords() || c;
+      learnCurrentMapEdges();
+      emit({ type: 'travel-progress', x: after.x, y: after.y, hop: step });
+      if (after.x === c.x && after.y === c.y) {
+        if (++stuck >= 3) {
+          return emit({ type: 'travel-done', ok: false, reason: 'stuck', x: after.x, y: after.y });
+        }
+      } else {
+        stuck = 0;
+      }
+    }
+
+    var at = mapCoords();
+    var arrived = !!at && at.x === target.worldX && at.y === target.worldY;
+    // Final step to the exact cell, if one was asked for and it is walkable.
     if (arrived && target.cellId != null) {
       await waitFor(function () { return iso.mapRenderer.isReady && charIdle(); }, 8000);
-      try { iso._movePlayerOnMap(target.cellId, false); } catch (e) {}
+      try {
+        var cell = iso.mapRenderer.map.cells[target.cellId];
+        if (cell && (cell.l & 1)) iso._movePlayerOnMap(target.cellId, false);
+      } catch (e) {}
     }
-    emit({ type: 'travel-done', ok: arrived, reason: arrived ? 'arrived' : 'max-hops' });
+    emit({ type: 'travel-done', ok: arrived, reason: arrived ? 'arrived' : 'max-hops',
+           x: at ? at.x : null, y: at ? at.y : null });
   }
 
-  // Report the real shape of the client objects travel depends on, so the seam
-  // above can be pinned to actual field names from an in-game session.
-  function travelDebug() {
+  // --- Right-click on the world map -> "Courir ici" -------------------------
+  // The world map view owns the pixel -> grid-coordinate transform
+  // (convertCanvasToGridCoordinate), so a right-click on its canvas maps
+  // straight onto the coordinates travelTo() already walks toward.
+  var travelHooked = false;
+
+  function worldMapView() {
     try {
-      var iso = window.isoEngine, gui = window.gui;
-      var map = iso && iso.mapRenderer && iso.mapRenderer.map;
-      var pos = gui && gui.playerData && gui.playerData.position;
-      var sample = null;
-      if (map && map.cells) {
-        for (var i = 0; i < map.cells.length; i++) {
-          if (map.cells[i] && map.cells[i].mapChangeData) {
-            sample = { cellId: i, mapChangeData: map.cells[i].mapChangeData };
-            break;
-          }
-        }
+      var w = windowsManager() && windowsManager().getWindow('worldMap');
+      return w && (w._worldMap || (w.getWorldMap && w.getWorldMap())) || null;
+    } catch (e) { return null; }
+  }
+
+  // Minimal context menu drawn over the map; the client's own menus are touch
+  // widgets and not reusable for a desktop right-click.
+  function travelMenu(px, py, label, onGo) {
+    var old = document.getElementById('stakk-travel-menu');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.id = 'stakk-travel-menu';
+    el.style.cssText = [
+      'position:fixed', 'left:' + px + 'px', 'top:' + py + 'px', 'z-index:99999',
+      'background:#2b2118', 'border:1px solid #7a6a4f', 'border-radius:3px',
+      'color:#e8dcc0', 'font:12px sans-serif', 'padding:4px 0', 'cursor:pointer',
+      'box-shadow:0 2px 8px rgba(0,0,0,.6)', 'user-select:none',
+    ].join(';');
+    var item = document.createElement('div');
+    item.textContent = 'Courir ici ' + label;
+    item.style.cssText = 'padding:5px 14px;white-space:nowrap';
+    item.onmouseenter = function () { item.style.background = '#40311f'; };
+    item.onmouseleave = function () { item.style.background = ''; };
+    item.onclick = function (ev) { ev.stopPropagation(); el.remove(); onGo(); };
+    el.appendChild(item);
+    document.body.appendChild(el);
+    setTimeout(function () {
+      document.addEventListener('mousedown', function close() {
+        el.remove();
+        document.removeEventListener('mousedown', close);
+      });
+    }, 0);
+  }
+
+  var lastPointer = null;
+
+  // Screen point -> world coordinates -> menu. Shared by the left-click tap
+  // handler and the right-click handler.
+  function openTravelMenu(clientX, clientY) {
+    var map = worldMapView();
+    var canvas = map && map.canvas;
+    if (!canvas || typeof map.convertCanvasToGridCoordinate !== 'function') return;
+    var r = canvas.getBoundingClientRect();
+    // Canvas backing store can differ from its CSS size — scale the click.
+    var cx = (clientX - r.left) * (canvas.width / r.width);
+    var cy = (clientY - r.top) * (canvas.height / r.height);
+    var g;
+    try { g = map.convertCanvasToGridCoordinate(cx, cy); } catch (e) { return; }
+    if (!g || g.i == null) return;
+    travelMenu(clientX, clientY, '(' + g.i + ',' + g.j + ')', function () {
+      emit({ type: 'travel-started', x: g.i, y: g.j });
+      travelTo({ worldX: g.i, worldY: g.j });
+    });
+  }
+
+  // The client's own world-map context menu (the one with "Placer un point de
+  // repère") is a generic .contextContent popup whose entries are plain
+  // .cmButton divs, and whose header already prints the clicked coordinates as
+  // "Coord. x,y". So rather than drawing our own menu, watch for that popup and
+  // splice a "Courir ici" button into it, styled like its siblings.
+  var COORD_RE = /Coord\.\s*(-?\d+)\s*,\s*(-?\d+)/;
+
+  // The client keeps ~30 recycled .entryList nodes in the DOM and only ever
+  // shows one, so target the visible one — picking any match gives stale
+  // coordinates from a previous open.
+  function visibleEntryList() {
+    var lists = document.querySelectorAll('.entryList');
+    for (var i = 0; i < lists.length; i++) {
+      var l = lists[i];
+      if (l.getBoundingClientRect().width > 0 && listCoords(l)) return l;
+    }
+    return null;
+  }
+
+  // Read the coordinates from the client's own tooltip block, not from the
+  // whole list: our injected label also contains an "(x,y)" pair, and matching
+  // that would feed the entry its own stale text.
+  function listCoords(list) {
+    var tip = list.querySelector('.worldMapTooltip, .WorldMapTooltip') || list;
+    var m = COORD_RE.exec(tip.textContent || '');
+    return m ? { x: parseInt(m[1], 10), y: parseInt(m[2], 10) } : null;
+  }
+
+  function injectTravelEntry() {
+    try {
+      var list = visibleEntryList();
+      if (!list) return;
+      var c = listCoords(list);
+      if (!c) return;
+
+      // These nodes are recycled: an entry added on a previous open is still
+      // here, showing stale coordinates. Refresh its label rather than bailing
+      // out because one already exists.
+      var want = 'Courir ici (' + c.x + ',' + c.y + ')';
+      var existing = list.querySelector('.stakk-travel-entry');
+      if (existing) {
+        if (existing.textContent !== want) existing.textContent = want;
+        return;
       }
-      return {
-        mapId: iso && iso.mapRenderer && iso.mapRenderer.mapId,
-        hasMovePlayer: !!(iso && iso._movePlayerOnMap),
-        mapKeys: map ? Object.keys(map).slice(0, 40) : null,
-        cellCount: map && map.cells ? map.cells.length : null,
-        sampleBorderCell: sample,
-        position: pos ? { worldX: pos.worldX, worldY: pos.worldY, mapId: pos.mapId } : null,
-        posKeys: pos ? Object.keys(pos) : null,
-      };
-    } catch (e) { return { error: String(e) }; }
+
+      // Match the client's own entries so it looks native.
+      var model = list.querySelector('.cmButton');
+      var btn = document.createElement('div');
+      btn.className = (model ? model.className : 'cmButton Button scaleOnPress') + ' stakk-travel-entry';
+      btn.textContent = want;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        // Re-read at click time: this node is recycled, and the coordinates it
+        // showed when injected may belong to an earlier open.
+        var now = listCoords(list);
+        if (!now) return;
+        emit({ type: 'travel-started', x: now.x, y: now.y });
+        travelTo({ worldX: now.x, worldY: now.y });
+        var cancel = null;
+        list.querySelectorAll('.cmButton').forEach(function (b) {
+          if (/annuler|cancel/i.test(b.textContent || '')) cancel = b;
+        });
+        if (cancel) cancel.click();
+      }, true);
+
+      if (model) list.insertBefore(btn, model);
+      else list.appendChild(btn);
+    } catch (e) {}
+  }
+
+  // The popup is shown by toggling recycled nodes rather than inserting new
+  // ones, so a childList observer alone misses it — watch attributes and style
+  // changes too, and re-check on each mutation batch.
+  function watchContextMenus() {
+    try {
+      var pending = false;
+      var obs = new MutationObserver(function () {
+        if (pending) return;
+        pending = true;
+        setTimeout(function () { pending = false; injectTravelEntry(); }, 30);
+      });
+      obs.observe(document.body, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['style', 'class'],
+      });
+    } catch (e) {}
+  }
+
+  function installTravelHook() {
+    if (travelHooked) return;
+    var map = worldMapView();
+    var canvas = map && map.canvas;
+    if (!canvas || typeof map.convertCanvasToGridCoordinate !== 'function') return;
+
+    // Left click is left alone: the client's own context menu already opens on
+    // tap, and watchContextMenus() adds "Courir ici" to it. Right click keeps
+    // our own menu as a fallback for spots where that popup does not appear.
+    canvas.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var r = canvas.getBoundingClientRect();
+      // Canvas backing store can differ from its CSS size — scale the click.
+      var cx = (e.clientX - r.left) * (canvas.width / r.width);
+      var cy = (e.clientY - r.top) * (canvas.height / r.height);
+      openTravelMenu(e.clientX, e.clientY);
+    }, true);
+
+    travelHooked = true;
+    emit({ type: 'travel-hook', ok: true });
+  }
+
+  function travelDebug() {
+    var out = { ping: 'alive' };
+    function probe(name, fn) {
+      try { out[name] = fn(); } catch (e) { out[name] = 'ERR: ' + String(e); }
+    }
+    probe('here', function () { return mapCoords(); });
+    probe('lookupWorks', function () {
+      var h = mapCoords();
+      return h ? { at: subAreaAt(h.x, h.y), north3: subAreaAt(h.x, h.y - 3) } : 'no-pos';
+    });
+    // Real routes of increasing length, with timing.
+    probe('routes', function () {
+      var h = mapCoords();
+      if (!h) return 'no-pos';
+      var res = {};
+      [[0,-3],[0,-8],[5,-10],[-6,4]].forEach(function (d) {
+        var tx = h.x + d[0], ty = h.y + d[1];
+        var t0 = Date.now();
+        var p = findWorldPath(h.x, h.y, tx, ty);
+        res[tx + ',' + ty] = p === null
+          ? 'no-route (' + (Date.now() - t0) + 'ms)'
+          : { steps: p.length, ms: Date.now() - t0, first: p.slice(0, 3) };
+      });
+      return res;
+    });
+    probe('menuHook', function () { return travelHooked; });
+    return out;
   }
 
   // Diagnostic: the authoritative list of window ids the client actually
@@ -636,6 +1122,13 @@ function gameHook() {
       travelTo(p.target || {});
     } else if (p.type === 'travel-cancel') {
       travelAbort = true;
+    } else if (p.type === 'eval') {
+      // Run a snippet inside the game's main world and report the result, so
+      // client internals can be inspected without reloading the account.
+      var r;
+      try { r = { ok: true, value: eval(p.code) }; } catch (e) { r = { ok: false, error: String(e) }; }
+      try { JSON.stringify(r); } catch (e) { r = { ok: r.ok, value: String(r.value) }; }
+      emit({ type: 'eval-result', data: r });
     } else if (p.type === 'travel-debug') {
       emit({ type: 'travel-debug', data: travelDebug() });
     } else if (p.type === 'windows-debug') {
@@ -644,6 +1137,13 @@ function gameHook() {
   });
 
   function onGuiReady(gui) {
+    // The world map canvas only exists once the window has been opened once.
+    try {
+      gui.on('worldMapOpened', installTravelHook);
+    } catch (e) {}
+    watchContextMenus();
+    setInterval(installTravelHook, 3000);
+
     if (noConfirm) applyNoConfirm(true);
     if (showResources) setResourceOverlay(true);
     if (hideShop) setHideShop(true);
