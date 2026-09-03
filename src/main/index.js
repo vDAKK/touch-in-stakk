@@ -171,7 +171,7 @@ async function boot() {
     frame: false,
     backgroundColor: '#14161c',
     title: 'Touch in STAKK',
-    icon: path.join(__dirname, '../../stakk.ico'),
+    icon: path.join(__dirname, '../../build/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

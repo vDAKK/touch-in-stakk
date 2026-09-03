@@ -56,7 +56,7 @@ $('close').onclick = () => window.touch.windowClose();
 
 // Community link. Replace with your own invite; opened in the default browser
 // (main restricts app:open-external to https).
-const STAKK_DISCORD_URL = 'https://discord.gg/your-invite';
+const STAKK_DISCORD_URL = 'https://discord.gg/7R2tFcAkMy';
 $('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
 
 // Quick window-size presets, kept on the game's 1440/800 aspect ratio so the

@@ -33,7 +33,7 @@
     "files": [
       "src/**/*",
       "package.json",
-      "stakk.ico"
+      "build/icon.png"
     ],
     "publish": [
       {
@@ -44,7 +44,7 @@
       }
     ],
     "win": {
-      "icon": "stakk.ico",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -69,6 +69,7 @@
       "artifactName": "Touch-in-STAKK-portable-${version}.${ext}"
     },
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.games",
       "target": [
         {
