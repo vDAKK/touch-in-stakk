@@ -1,7 +1,7 @@
 {
   "name": "touch-in-stakk",
   "productName": "Touch in STAKK",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Launcher desktop pour Dofus Touch",
   "author": "STAKK",
@@ -39,7 +39,7 @@
       {
         "provider": "github",
         "owner": "vDAKK",
-        "repo": "touch-in-stakk-releases"
+        "repo": "touch-in-stakk"
       }
     ],
     "win": {

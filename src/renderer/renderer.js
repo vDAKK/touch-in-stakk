@@ -68,29 +68,48 @@ const RESOLUTION_PRESETS = [
   { label: 'Large', width: 1600, height: 889 },
   { label: 'XL', width: 1920, height: 1067 },
 ];
+const GAME_RATIO = 1440 / 800;
+// Width and height stay linked on the game's ratio: editing either one, the
+// slider or a preset updates the rest, and the window follows live as a
+// preview (Annuler puts it back).
+function setResolution(w, h, source) {
+  const maxW = Math.max(960, screen.availWidth);
+  if (source === 'height') w = Math.round(h * GAME_RATIO);
+  w = Math.min(maxW, Math.max(960, Math.round(w)));
+  h = Math.round(w / GAME_RATIO);
+  if (source !== 'width') $('res-w').value = w;
+  if (source !== 'height') $('res-h').value = h;
+  $('res-slider').value = w;
+  const fit = Math.round((w / screen.availWidth) * 100);
+  $('res-hint').textContent = fit >= 100 ? 'Plein écran' : fit + ' % de l\'écran';
+  markActivePreset();
+  previewResolution(w, h);
+}
+let previewTimer = null;
+function previewResolution(w, h) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => window.touch.previewSize(w, h), 120);
+}
 function renderPresets() {
   const box = $('res-presets');
   box.innerHTML = '';
-  for (const p of RESOLUTION_PRESETS) {
+  const fitW = Math.min(screen.availWidth, Math.round(screen.availHeight * GAME_RATIO));
+  const presets = [...RESOLUTION_PRESETS.filter((p) => p.width <= screen.availWidth),
+                   { label: 'Écran', width: fitW, height: Math.round(fitW / GAME_RATIO) }];
+  for (const p of presets) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'preset-btn';
+    b.dataset.w = p.width;
     b.textContent = p.label + ' · ' + p.width + '×' + p.height;
-    b.onclick = () => {
-      $('res-w').value = p.width;
-      $('res-h').value = p.height;
-      markActivePreset();
-    };
+    b.onclick = () => setResolution(p.width, p.height, 'preset');
     box.appendChild(b);
   }
+  $('res-slider').max = Math.max(960, screen.availWidth);
 }
 function markActivePreset() {
   const w = Number($('res-w').value);
-  const h = Number($('res-h').value);
-  for (const b of $('res-presets').children) {
-    const p = RESOLUTION_PRESETS.find((x) => x.label + ' · ' + x.width + '×' + x.height === b.textContent);
-    b.classList.toggle('active', !!p && p.width === w && p.height === h);
-  }
+  for (const b of $('res-presets').children) b.classList.toggle('active', Number(b.dataset.w) === w);
 }
 
 // Tab bar on top (default) or down the left side, per the user's choice.
@@ -109,6 +128,18 @@ window.stakkTravelCancel = () => {
 };
 // Run code inside the active account's game world. Avoids relaunching (and
 // re-authenticating) the client just to inspect something.
+// Auto-harvest. circuit is a list of world coordinates to cycle through:
+//   stakkHarvest([{x:5,y:-18},{x:5,y:-17}])
+// Omit it to gather the current map only. stakkHarvestStop() halts it.
+window.stakkHarvest = (circuit) => {
+  if (activeId) sendToView(activeId, { type: 'harvest-start', circuit: circuit || [] });
+};
+window.stakkHarvestStop = () => {
+  if (activeId) sendToView(activeId, { type: 'harvest-stop' });
+};
+window.stakkHarvestStatus = () => {
+  if (activeId) sendToView(activeId, { type: 'harvest-status' });
+};
 window.stakkEval = (code) => {
   if (activeId) sendToView(activeId, { type: 'eval', code: String(code) });
 };
@@ -123,8 +154,15 @@ window.stakkWindowsDebug = () => {
 $('add-tab').onclick = addAccount;
 $('add-first').onclick = addAccount;
 $('group-auto').onclick = groupAuto;
-$('follow-toggle').onclick = toggleFollow;
 $('broadcast-toggle').onclick = toggleBroadcast;
+$('harvest-toggle').onclick = toggleHarvest;
+
+// Mirror each toolbar button's title into data-tip: the CSS tooltip renders it,
+// since the native one does not appear in a frameless window on macOS.
+for (const b of document.querySelectorAll('.bar-btn[title]')) {
+  b.dataset.tip = b.getAttribute('title');
+  b.removeAttribute('title');
+}
 $('mule-toggle').onclick = toggleMuleFollow;
 $('stats-btn').onclick = toggleStats;
 $('stats-close').onclick = () => ($('stats-panel').hidden = true);
@@ -187,21 +225,13 @@ async function reorder(draggedId, targetId) {
   renderTabs();
 }
 $('open-settings').onclick = openSettings;
-$('close-settings').onclick = () => ($('settings-modal').hidden = true);
+$('close-settings').onclick = () => { clearTimeout(previewTimer); window.touch.previewSize(settings.resolution.width, settings.resolution.height); (() => ($('settings-modal').hidden = true))(); };
 $('save-settings').onclick = saveSettings;
-$('capture-entities').onclick = startEntitiesCapture;
 $('open-devtools').onclick = () => {
   const wv = activeId && document.getElementById(viewId(activeId));
   if (wv && wv.openDevTools) wv.openDevTools();
 };
 
-// Ask the active account to record the next click as the entities toggle.
-function startEntitiesCapture() {
-  if (!activeId) return;
-  $('capture-entities').textContent = 'Clique le bouton en jeu…';
-  $('settings-modal').hidden = true;
-  sendToView(activeId, { type: 'capture-entities' });
-}
 $('retry').onclick = retryPatch;
 
 // --- Auto-update banner ------------------------------------------------------
@@ -257,11 +287,10 @@ async function createView(account) {
   wv.setAttribute('src', gameUrl);
   wv.classList.add('inactive');
   wv.addEventListener('dom-ready', () => {
-    if (wv.setAudioMuted) wv.setAudioMuted(settings.muted);
+    applyMute();
     wv.send('keybinds', computeKeyToAction());
     wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
     wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
-    if (settings.entitiesSelector) wv.send('qol', { type: 'entities-selector', selector: settings.entitiesSelector });
     wv.send('qol', { type: 'hide-shop', on: !!settings.hideShop });
   });
   wv.addEventListener('ipc-message', (e) => {
@@ -328,6 +357,17 @@ function renderTabs() {
   }
 }
 
+// One place decides who is audible: global mute, or only the active tab when
+// "mute inactive tabs" is on.
+function applyMute() {
+  for (const a of accounts) {
+    const wv = document.getElementById(viewId(a.id));
+    if (!wv || !wv.setAudioMuted) continue;
+    const off = !!settings.muted || (!!settings.muteInactive && a.id !== activeId);
+    try { wv.setAudioMuted(off); } catch {}
+  }
+}
+
 function setActive(id) {
   activeId = id;
   alerted.delete(id);
@@ -336,6 +376,7 @@ function setActive(id) {
     const wv = document.getElementById(viewId(a.id));
     if (wv) wv.classList.toggle('inactive', a.id !== id);
   }
+  applyMute();
   if (broadcasting) updateBroadcastSource();
   renderTabs();
 }
@@ -346,20 +387,32 @@ function handleQol(accountId, msg) {
     identities[accountId] = { name: msg.name, id: msg.id };
     autoNameTab(accountId, msg.name);
     pushOwnAccounts();
-  } else if (msg.type === 'entities-selector') {
-    settings.entitiesSelector = msg.selector;
-    window.touch.setSettings({ entitiesSelector: msg.selector }).then(() => {
-      broadcastToAll({ type: 'entities-selector', selector: msg.selector });
-    });
-    $('capture-entities').textContent = 'Capturer';
   } else if (msg.type === 'stats') {
     sessionStats[accountId] = { xp: msg.xp || 0, kamas: msg.kamas || 0 };
     if (!$('stats-panel').hidden) renderStats();
   } else if (msg.type === 'position') {
     // Leader's position -> tell the mules (other accounts) to join its cell.
-    if (muleFollowing && accountId === activeId && msg.mapId != null && msg.cellId != null) {
+    if (msg.isPartyLeader) partyLeaderAcct = accountId;
+    else if (partyLeaderAcct === accountId) partyLeaderAcct = null;
+    if (muleFollowing && !msg.inFight && accountId === effectiveLeader() && msg.mapId != null && msg.cellId != null) {
       for (const a of accounts) {
-        if (a.id !== accountId) sendToView(a.id, { type: 'mule-follow', mapId: msg.mapId, cellId: msg.cellId });
+        if (a.id !== accountId) sendToView(a.id, { type: 'mule-follow', mapId: msg.mapId, cellId: msg.cellId, x: msg.x, y: msg.y });
+      }
+    }
+  } else if (msg.type === 'party-debug') {
+    console.log('[group] ' + accountId + ' ' + msg.what, msg.data || '');
+  } else if (msg.type === 'join-fight-seen') {
+    console.log('[fight] ' + accountId + ' voit combat ' + msg.fightId + ' chef dedans=' + msg.leaderInIt);
+  } else if (msg.type === 'fight-started') {
+    console.log('[fight] ' + accountId + ' lance combat ' + msg.fightId + ' chef=' + msg.isPartyLeader + ' option=' + !!settings.joinLeaderFight);
+    // The leader (pinned mule leader, else the tab you are on) starts a fight:
+    // every other account joins it.
+    // Grouped: only the party leader's fight counts. Ungrouped: fall back to
+    // the pinned/active tab.
+    const isLeader = msg.inParty ? msg.isPartyLeader : accountId === effectiveLeader();
+    if (settings.joinLeaderFight && isLeader) {
+      for (const a of accounts) {
+        if (a.id !== accountId) sendToView(a.id, { type: 'join-fight', ...msg });
       }
     }
   } else if (msg.type === 'my-turn') {
@@ -397,6 +450,31 @@ function handleQol(accountId, msg) {
     var where = msg.x != null ? ' à ' + msg.x + ',' + msg.y : '';
     console.log('[travel] done ok=' + msg.ok + ' reason=' + msg.reason + where);
     notify(accountId, msg.ok ? 'Arrivé à destination' : 'Voyage interrompu (' + (msg.reason || '?') + ')' + where);
+  } else if (msg.type === 'harvest-progress') {
+    console.log('[harvest] ' + msg.gathered + ' récolté(s) — ' + (msg.name || ''));
+  } else if (msg.type === 'automation-interrupted') {
+    harvesting.delete(accountId);
+    renderHarvestButton();
+    const what = (msg.stopped || []).join(' + ');
+    console.log('[stakk] action manuelle -> ' + what + ' interrompu(e)');
+    notify(accountId, what + ' interrompu (action manuelle)');
+  } else if (msg.type === 'harvest-skip') {
+    console.log('[harvest] passé: ' + (msg.name || msg.id));
+  } else if (msg.type === 'harvest-state') {
+    if (msg.state === 'travel') console.log('[harvest] vers ' + msg.x + ',' + msg.y);
+    else if (msg.state === 'fight') console.log('[harvest] combat — en pause');
+    else if (msg.state === 'started') console.log('[harvest] démarré (' + msg.points + ' points)');
+    else if (msg.state === 'stopped') {
+      console.log('[harvest] arrêté — ' + msg.gathered + ' récolté(s)');
+      harvesting.delete(accountId);
+      renderHarvestButton();
+      notify(accountId, 'Récolte arrêtée (' + msg.gathered + ')');
+    }
+    if (msg.state === 'started') { harvesting.add(accountId); renderHarvestButton(); }
+  } else if (msg.type === 'harvest-status') {
+    console.log('[harvest-status]', msg.data);
+  } else if (msg.type === 'spoof-error') {
+    console.warn('[spoof] injection failed:', msg.error);
   } else if (msg.type === 'eval-result') {
     console.log('[eval]', msg.data);
   } else if (msg.type === 'travel-debug') {
@@ -425,6 +503,24 @@ function accountName(id) {
 // launcher window isn't in the foreground.
 function maybeAttention() {
   try { if (!document.hasFocus()) window.touch.signalAttention(); } catch (e) {}
+}
+
+// Auto-harvest on the active account. The button reflects that account's
+// state, so switching tabs shows the right thing.
+const harvesting = new Set();
+
+function toggleHarvest() {
+  if (!activeId) return;
+  const on = harvesting.has(activeId);
+  sendToView(activeId, { type: on ? 'harvest-stop' : 'harvest-start', circuit: [] });
+  // Optimistic: the game confirms with harvest-state and corrects us if needed.
+  if (on) harvesting.delete(activeId); else harvesting.add(activeId);
+  renderHarvestButton();
+}
+
+function renderHarvestButton() {
+  const btn = $('harvest-toggle');
+  if (btn) btn.classList.toggle('on', activeId != null && harvesting.has(activeId));
 }
 
 function notify(accountId, text) {
@@ -470,7 +566,8 @@ async function autoNameTab(accountId, charName) {
 // auto-accept trades and duels coming from the others.
 function pushOwnAccounts() {
   const ids = Object.values(identities).map((i) => i.id).filter((v) => v != null);
-  const payload = { type: 'own-accounts', ids, autoAccept: !!(settings && settings.autoAcceptOwn), autoAcceptGroup: !!(settings && settings.autoAcceptGroup) };
+  const names = Object.values(identities).map((i) => i.name).filter(Boolean);
+  const payload = { type: 'own-accounts', ids, names, autoAccept: !!(settings && settings.autoAcceptOwn), autoAcceptGroup: !!(settings && settings.autoAcceptGroup), joinLeaderFight: !!(settings && settings.joinLeaderFight) };
   for (const a of accounts) sendToView(a.id, payload);
 }
 
@@ -521,9 +618,13 @@ function groupAuto() {
   const leader = accounts.find((a) => a.id === activeId);
   if (!leader) return;
   const leaderIdentity = identities[leader.id];
-  if (!leaderIdentity) return;
+  // Say why nothing happens instead of silently doing nothing: identities only
+  // arrive once each account is in game.
+  if (!leaderIdentity) { notify(activeId, 'Grouper : ce compte n\'est pas encore en jeu'); return; }
   const others = accounts.filter((a) => a.id !== leader.id && identities[a.id]);
-  if (!others.length) return;
+  const notReady = accounts.filter((a) => a.id !== leader.id && !identities[a.id]).length;
+  console.log('[group] chef=' + leaderIdentity.name + ' invités=' + others.map((a) => identities[a.id].name).join(',') + ' pas en jeu=' + notReady);
+  if (!others.length) { notify(activeId, 'Grouper : aucun autre compte en jeu'); return; }
   for (const a of others) sendToView(a.id, { type: 'expect-invite', from: leaderIdentity.name });
   sendToView(leader.id, { type: 'invite', names: others.map((a) => identities[a.id].name) });
 }
@@ -540,6 +641,7 @@ function toggleBroadcast() {
   broadcasting = !broadcasting;
   $('broadcast-toggle').classList.toggle('on', broadcasting);
   updateBroadcastSource();
+  renderHarvestButton();
 }
 
 function updateBroadcastSource() {
@@ -643,8 +745,17 @@ function handleBcastKey(sourceId, data) {
 // Mule follow: poll the active account's position and mirror it onto the others.
 let muleFollowing = false;
 let muleTimer = null;
+// The account being followed, pinned when the toggle is switched on. Keying off
+// activeId instead made the leader change with every tab switch — the previous
+// leader would then start walking to whichever account you had just opened.
+let muleLeader = null;
+// The account whose character leads the in-game party, learned from position
+// reports. Wins over the pinned tab whenever the accounts are grouped.
+let partyLeaderAcct = null;
+function effectiveLeader() { return partyLeaderAcct || muleLeader || activeId; }
 function toggleMuleFollow() {
   muleFollowing = !muleFollowing;
+  muleLeader = muleFollowing ? activeId : null;
   $('mule-toggle').classList.toggle('on', muleFollowing);
   if (muleTimer) {
     clearInterval(muleTimer);
@@ -652,23 +763,16 @@ function toggleMuleFollow() {
   }
   if (muleFollowing) {
     muleTimer = setInterval(() => {
-      if (activeId) sendToView(activeId, { type: 'get-position' });
+      // Poll every account: each answers with its position and whether it
+      // leads the party, which is how the leader is found.
+      for (const a of accounts) sendToView(a.id, { type: 'get-position' });
     }, 600);
   }
 }
 
-let following = false;
-function toggleFollow() {
-  const leader = accounts.find((a) => a.id === activeId);
-  if (!leader || !identities[leader.id]) return;
-  following = !following;
-  const leaderId = identities[leader.id].id;
-  for (const a of accounts) {
-    if (a.id === leader.id || !identities[a.id]) continue;
-    sendToView(a.id, { type: 'follow', leaderId, enabled: following });
-  }
-  $('follow-toggle').classList.toggle('on', following);
-}
+// Native party-follow was folded into the mule follow (one "Suivre le chef"
+// button): the mule path already crosses maps via travel and mirrors the cell.
+
 
 function pulseTab(id) {
   const tab = document.getElementById(tabId(id));
@@ -713,6 +817,8 @@ function renameTab(a) {
 }
 
 async function removeTab(a) {
+  // Following a leader that no longer exists would poll a dead view forever.
+  if (muleLeader === a.id && muleFollowing) toggleMuleFollow();
   if (!window.confirm('Supprimer le compte "' + a.name + '" ?')) return;
   await window.touch.accountsRemove(a.id);
   accounts = accounts.filter((x) => x.id !== a.id);
@@ -733,16 +839,23 @@ async function openSettings() {
   const s = await window.touch.getSettings();
   $('res-w').value = s.resolution.width;
   $('res-h').value = s.resolution.height;
+  $('res-slider').value = s.resolution.width;
+  $('res-hint').textContent = '';
+  markActivePreset();
   renderPresets();
   markActivePreset();
-  $('res-w').oninput = markActivePreset;
+  $('res-w').oninput = () => setResolution(Number($('res-w').value), 0, 'width');
+  $('res-h').oninput = () => setResolution(0, Number($('res-h').value), 'height');
+  $('res-slider').oninput = () => setResolution(Number($('res-slider').value), 0, 'slider');
   $('res-h').oninput = markActivePreset;
   $('tabbar-side').checked = !!s.tabBarSide;
   $('muted').checked = s.muted;
+  $('mute-inactive').checked = !!s.muteInactive;
   $('switch-on-turn').checked = s.switchOnTurn;
   $('notifications').checked = s.notifications;
   $('no-confirm').checked = s.noConfirm;
   $('auto-accept-group').checked = s.autoAcceptGroup;
+  $('join-leader-fight').checked = !!s.joinLeaderFight;
   $('hide-shop').checked = s.hideShop;
   $('show-resources').checked = s.showResources;
   $('auto-accept-own').checked = s.autoAcceptOwn;
@@ -758,20 +871,22 @@ async function saveSettings() {
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
     tabBarSide: $('tabbar-side').checked,
     muted,
+    muteInactive: $('mute-inactive').checked,
     switchOnTurn: $('switch-on-turn').checked,
     notifications: $('notifications').checked,
     noConfirm: $('no-confirm').checked,
     showResources: $('show-resources').checked,
     autoAcceptOwn: $('auto-accept-own').checked,
     autoAcceptGroup: $('auto-accept-group').checked,
+    joinLeaderFight: $('join-leader-fight').checked,
     hideShop: $('hide-shop').checked,
-    entitiesSelector: settings.entitiesSelector || null,
     keybinds: editingKeybinds,
   });
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
-    if (wv && wv.setAudioMuted) wv.setAudioMuted(muted);
+    // handled below by applyMute()
   }
+  applyMute();
   applyTabBarSide(settings.tabBarSide);
   pushKeybinds();
   pushOwnAccounts();

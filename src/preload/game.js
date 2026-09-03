@@ -6,12 +6,105 @@
 //     (the tab manager) over window.postMessage <-> ipcRenderer.sendToHost.
 const { ipcRenderer } = require('electron');
 
+// Make the page itself look like the tablet the HTTP headers already claim.
+// Header spoofing alone is not enough: the client reads navigator and screen
+// directly, and a Mac desktop signature there contradicts the Android user
+// agent it sends. Values come from the same per-account device profile, so a
+// tab is internally consistent and distinct from the other accounts'.
+function deviceSpoof(profile) {
+  var p = profile;
+  function def(obj, name, value) {
+    try {
+      Object.defineProperty(obj, name, { get: function () { return value; }, configurable: true });
+    } catch (e) {}
+  }
+  try {
+    def(navigator, 'userAgent', p.userAgent);
+    def(navigator, 'appVersion', p.userAgent.replace(/^Mozilla\//, ''));
+    def(navigator, 'platform', p.platform);
+    def(navigator, 'vendor', 'Google Inc.');
+    def(navigator, 'maxTouchPoints', 5);
+    def(navigator, 'hardwareConcurrency', p.cores);
+    def(navigator, 'deviceMemory', p.mem);
+    // userAgentData is structured and would otherwise still report macOS.
+    if (navigator.userAgentData) {
+      def(navigator, 'userAgentData', {
+        mobile: true,
+        platform: 'Android',
+        brands: navigator.userAgentData.brands || [],
+        getHighEntropyValues: function () {
+          return Promise.resolve({ platform: 'Android', mobile: true, model: p.model });
+        },
+      });
+    }
+    def(screen, 'width', p.width);
+    def(screen, 'height', p.height);
+    def(screen, 'availWidth', p.width);
+    def(screen, 'availHeight', p.height);
+    def(window, 'devicePixelRatio', p.dpr);
+    def(window, 'orientation', 0);
+    // Touch feature-detection: the client branches on these to pick its
+    // touch UI, and they are absent on a desktop build.
+    if (!('ontouchstart' in window)) {
+      try { window.ontouchstart = null; } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+// Background tabs: Chromium is already told not to throttle, but the client
+// itself drops its frame rate when the page reports hidden or loses focus (a
+// battery habit from the tablet build). Present it as always visible and
+// focused, and keep those events from reaching it.
+function keepAlive() {
+  function def(obj, name, value) {
+    try { Object.defineProperty(obj, name, { get: function () { return value; }, configurable: true }); } catch (e) {}
+  }
+  try {
+    def(document, 'hidden', false);
+    def(document, 'visibilityState', 'visible');
+    def(document, 'webkitHidden', false);
+    try { document.hasFocus = function () { return true; }; } catch (e) {}
+    // A guest view whose layer is not composited stops receiving frame
+    // callbacks, which freezes anything driven by requestAnimationFrame. Race
+    // the native callback against a timer so the loop keeps ticking at ~40fps
+    // even when the compositor skips this tab.
+    var nativeRaf = window.requestAnimationFrame.bind(window);
+    var nativeCaf = window.cancelAnimationFrame.bind(window);
+    var pending = {};
+    var seq = 0;
+    window.requestAnimationFrame = function (cb) {
+      var id = ++seq, done = false;
+      var run = function () {
+        if (done) return;
+        done = true;
+        delete pending[id];
+        try { cb(performance.now()); } catch (e) {}
+      };
+      var r = nativeRaf(function () { clearTimeout(t); run(); });
+      var t = setTimeout(function () { nativeCaf(r); run(); }, 25);
+      pending[id] = { r: r, t: t };
+      return id;
+    };
+    window.cancelAnimationFrame = function (id) {
+      var p = pending[id];
+      if (!p) return;
+      nativeCaf(p.r); clearTimeout(p.t); delete pending[id];
+    };
+    ['visibilitychange', 'webkitvisibilitychange', 'pagehide', 'blur', 'freeze'].forEach(function (ev) {
+      var stop = function (e) { e.stopImmediatePropagation(); };
+      window.addEventListener(ev, stop, true);
+      document.addEventListener(ev, stop, true);
+    });
+  } catch (e) {}
+}
+
 // Runs in the page's MAIN world. No node/ipc access here — it talks to the
 // preload only through window.postMessage, so the game keeps no privileged refs.
 function gameHook() {
   var expectInviteFrom = null;
   var expectTimer = null;
   var ownIds = {};          // character ids of the user's other accounts
+  var ownNames = {};        // their character names, for messages lacking an id
   var autoAccept = false;   // auto-accept trades/duels coming from those
   var session = { xp: 0, kamas: 0 };
   var lastKamas = null;
@@ -19,6 +112,7 @@ function gameHook() {
   var showResources = false;
   var autoAcceptGroup = false;
   var hideShop = false;
+  var joinLeaderFight = false;   // join any fight the party leader is in
 
   function emit(payload) {
     try {
@@ -91,8 +185,31 @@ function gameHook() {
         }
       }
       if (spellId == null) return;
-      window.gui.emit('spellSlotSelected', pd.id, spellId);
+      // While a summon is controlled the shortcut bar shows its spells, and a
+      // cast must be attributed to it, not to the player.
+      window.gui.emit('spellSlotSelected', controlledId(pd), spellId);
     } catch (e) {}
+  }
+
+  // The entity currently under the player's control: their character, or a
+  // summon/controlled creature during its turn.
+  function controlledId(pd) {
+    try {
+      var ch = pd.characters;
+      if (ch) {
+        if (typeof ch.getControlledCharacterId === 'function') {
+          var cid = ch.getControlledCharacterId();
+          if (cid != null) return cid;
+        }
+        if (ch.controlledCharacterId != null) return ch.controlledCharacterId;
+      }
+      var fm = window.gui.fightManager;
+      if (fm && typeof fm.getControlledFighterId === 'function') {
+        var fid = fm.getControlledFighterId();
+        if (fid != null) return fid;
+      }
+    } catch (e) {}
+    return pd.id;
   }
 
   // The touch client asks to confirm a move or a spell cast (tap once to aim,
@@ -127,24 +244,119 @@ function gameHook() {
   // Mule follow: mirror the leader's exact cell on the same map (the native
   // party-follow only handles map changes, not intra-map positioning). Uses the
   // client's own _movePlayerOnMap, guarded on map-load state like Retouch does.
+  // The in-game party leader's player id, or null when not grouped. The field
+  // name is resolved loosely (leaderId / leader / leaderPlayerId) since the
+  // party object's exact shape was not pinned from a session.
+  function partyLeaderId() {
+    try {
+      var pd = window.gui.playerData.partyData;
+      var party = pd && pd.getClassicalParty && pd.getClassicalParty();
+      if (!party) return null;
+      // Own fields are underscore-prefixed (_leaderId, _partyId); accessor
+      // names without it may or may not exist, so check both.
+      if (party._leaderId != null) return party._leaderId;
+      if (party.leaderId != null) return party.leaderId;
+    } catch (e) {}
+    return null;
+  }
+  function isPartyLeader() {
+    try { return partyLeaderId() != null && partyLeaderId() === window.gui.playerData.id; }
+    catch (e) { return false; }
+  }
+
   function readPosition() {
     try {
       var iso = window.isoEngine;
       var am = window.actorManager;
       var mapId = iso && iso.mapRenderer ? iso.mapRenderer.mapId : null;
       var cellId = am && am.userActor ? am.userActor.cellId : null;
-      return { mapId: mapId, cellId: cellId };
-    } catch (e) { return { mapId: null, cellId: null }; }
+      // World coordinates too: a follower on another map needs them to travel.
+      var c = mapCoords();
+      return { mapId: mapId, cellId: cellId, x: c ? c.x : null, y: c ? c.y : null };
+    } catch (e) { return { mapId: null, cellId: null, x: null, y: null }; }
   }
 
-  function muleFollow(mapId, cellId) {
+  // Travel started to rejoin a leader on another map. Tracked so repeated
+  // position updates don't stack trips on top of each other.
+  var muleTravelling = false;
+
+  // Grid distance between two cells on the 14-wide isometric map.
+  function cellDist(a, b) {
+    var W = 14;
+    var ra = Math.floor(a / W), ca = a % W, rb = Math.floor(b / W), cb = b % W;
+    var ua = ca + Math.floor(ra / 2), va = Math.floor((ra + 1) / 2) - ca;
+    var ub = cb + Math.floor(rb / 2), vb = Math.floor((rb + 1) / 2) - cb;
+    return Math.abs(ua - ub) + Math.abs(va - vb);
+  }
+
+  // A free walkable cell next to `around`, never `around` itself: followers
+  // must not stack on the leader (or on each other — occupied cells are
+  // skipped, and each account prefers a different candidate so they spread).
+  function freeCellNear(around) {
+    try {
+      var mr = window.isoEngine.mapRenderer, am = window.actorManager;
+      var cells = mr.map.cells;
+      var occupied = {};
+      try { (am.getOccupiedCells() || []).forEach(function (c) { occupied[c] = true; }); } catch (e) {}
+      var cand = [];
+      for (var i = 0; i < cells.length; i++) {
+        if (i === around || !cells[i] || !(cells[i].l & 1) || occupied[i]) continue;
+        var d = cellDist(i, around);
+        if (d >= 1 && d <= 3) cand.push({ cell: i, d: d });
+      }
+      if (!cand.length) return null;
+      cand.sort(function (a, b) { return a.d - b.d || a.cell - b.cell; });
+      var pick = Math.abs(window.gui.playerData.id || 0) % Math.min(4, cand.length);
+      return cand[pick].cell;
+    } catch (e) { return null; }
+  }
+
+  // Direction in which `mapId` is a direct neighbour of the current map.
+  function neighbourDir(mapId) {
+    try {
+      var map = window.isoEngine.mapRenderer.map;
+      var dirs = ['top', 'bottom', 'left', 'right'];
+      for (var i = 0; i < dirs.length; i++) if (map[dirs[i] + 'NeighbourId'] === mapId) return dirs[i];
+    } catch (e) {}
+    return null;
+  }
+
+  function muleFollow(mapId, cellId, x, y) {
     try {
       var iso = window.isoEngine;
       var am = window.actorManager;
       if (!iso || !am || !am.userActor || !iso.mapRenderer || !iso.mapRenderer.isReady) return;
-      if (iso.mapRenderer.mapId !== mapId) return; // different map -> native party-follow handles it
-      if (am.userActor.moving || am.userActor.cellId === cellId) return;
-      iso._movePlayerOnMap(cellId, false);
+      if (inFight()) return;
+
+      if (iso.mapRenderer.mapId !== mapId) {
+        if (muleTravelling) return;
+        muleTravelling = true;
+        var done = function () { muleTravelling = false; };
+
+        // Leader one map over (the usual case): hop straight through that
+        // border. Needs nothing but this map's own neighbour ids, so it works
+        // whether or not the world map was ever opened.
+        var dir = neighbourDir(mapId);
+        if (dir) {
+          beginSelf();
+          hopToward(0, 0, [dir]).then(function () { endSelf(); done(); },
+                                        function () { endSelf(); done(); });
+          return;
+        }
+        // Further away: plan a route by coordinates.
+        if (x == null || y == null) return done();
+        var c = mapCoords();
+        if (c && c.x === x && c.y === y) return done();   // same coords, map still loading
+        travelTo({ worldX: x, worldY: y }).then(done, done);
+        return;
+      }
+
+      if (am.userActor.moving) return;
+      // Close enough already: don't shuffle on every position report.
+      if (cellDist(am.userActor.cellId, cellId) <= 3) return;
+      var target = freeCellNear(cellId);
+      if (target == null) return;
+      asSelf(function () { iso._movePlayerOnMap(target, false); });
     } catch (e) {}
   }
 
@@ -369,9 +581,9 @@ function gameHook() {
   // unreachable exit silently walks and stops. Worse, a border cell the server
   // rejects rolls the character back to where it started. So: try each exit
   // cell, confirm the map really changed, and move on to the next one if not.
-  async function hopToward(dx, dy) {
+  async function hopToward(dx, dy, onlyDirs) {
     var iso = window.isoEngine;
-    var dirs = hopDirections(dx, dy);
+    var dirs = onlyDirs || hopDirections(dx, dy);
     var here = mapCoords();
     for (var i = 0; i < dirs.length; i++) {
       var dir = dirs[i];
@@ -385,7 +597,7 @@ function gameHook() {
       // the move is not legal — then remember the edge so A* routes around it.
       if (!cells.length) {
         var fromDirect = iso.mapRenderer.mapId;
-        try { iso._requestMapChange(neighbourId, dir); } catch (e) {}
+        try { asSelf(function () { iso._requestMapChange(neighbourId, dir); }); } catch (e) {}
         var jumped = await waitFor(function () {
           return iso.mapRenderer.mapId !== fromDirect && iso.mapRenderer.isReady;
         }, 6000);
@@ -404,7 +616,7 @@ function gameHook() {
           }, 10000);
 
           var fromMap = iso.mapRenderer.mapId;
-          try { iso.gotoNeighbourMap(dir, cells[j], 0, 0); } catch (e) { break; }
+          try { asSelf(function () { iso.gotoNeighbourMap(dir, cells[j], 0, 0); }); } catch (e) { break; }
 
           // Poll for the crossing. A character that stops moving without the
           // map having changed means the walk finished but the transition was
@@ -440,6 +652,15 @@ function gameHook() {
 
   async function travelTo(target) {
     travelAbort = false;
+    installManualWatch();
+    if (!onManualAction) onManualAction = abortAutomation;
+    beginSelf();
+    try {
+      return await travelToInner(target);
+    } finally { endSelf(); }
+  }
+
+  async function travelToInner(target) {
     var iso = window.isoEngine;
     if (!iso || !iso.mapRenderer || typeof iso.gotoNeighbourMap !== 'function') {
       return emit({ type: 'travel-done', ok: false, reason: 'no-engine' });
@@ -455,8 +676,8 @@ function gameHook() {
     // water and dead ends that a greedy axis walk would get stuck against.
     // The coordinate lookup lives on the world map view, which only exists once
     // that window has been opened. Without it there is no route to plan.
-    if (!worldMapView()) {
-      return emit({ type: 'travel-done', ok: false, reason: 'open-world-map-first' });
+    if (!(await ensureWorldMapView())) {
+      return emit({ type: 'travel-done', ok: false, reason: 'no-world-map-data' });
     }
     learnCurrentMapEdges();
     var route = findWorldPath(here.x, here.y, target.worldX, target.worldY);
@@ -520,9 +741,10 @@ function gameHook() {
       await waitFor(function () { return iso.mapRenderer.isReady && charIdle(); }, 8000);
       try {
         var cell = iso.mapRenderer.map.cells[target.cellId];
-        if (cell && (cell.l & 1)) iso._movePlayerOnMap(target.cellId, false);
+        if (cell && (cell.l & 1)) asSelf(function () { iso._movePlayerOnMap(target.cellId, false); });
       } catch (e) {}
     }
+    if (!arrived) toast('Voyage interrompu', 'warn');
     emit({ type: 'travel-done', ok: arrived, reason: arrived ? 'arrived' : 'max-hops',
            x: at ? at.x : null, y: at ? at.y : null });
   }
@@ -538,6 +760,38 @@ function gameHook() {
       var w = windowsManager() && windowsManager().getWindow('worldMap');
       return w && (w._worldMap || (w.getWorldMap && w.getWorldMap())) || null;
     } catch (e) { return null; }
+  }
+
+  // The coordinate lookup the pathfinder needs lives on the world map view,
+  // which the client only builds when that window is first opened. Build it
+  // ourselves so travel works without the player ever opening the map: ask the
+  // window to create its view, and fall back to a blink open/close if it has
+  // no such method. Then wait for the coordinate table to load.
+  function worldMapReady() {
+    var m = worldMapView();
+    if (!m) return false;
+    try {
+      var t = m._subAreaIdPerCoordinate;
+      return !!(t && Object.keys(t).length && typeof m.getSubAreaAtGridCoordinate === 'function');
+    } catch (e) { return false; }
+  }
+
+  async function ensureWorldMapView() {
+    if (worldMapReady()) return true;
+    var wm = windowsManager();
+    var w = wm && wm.getWindow('worldMap');
+    if (!w) return false;
+    try {
+      if (!worldMapView() && typeof w._createWorldMap === 'function') w._createWorldMap();
+    } catch (e) {}
+    if (!worldMapView()) {
+      // No builder to call: open and immediately close, which creates the view.
+      try { wm.open('worldMap'); } catch (e) {}
+      await tSleep(50);
+      try { wm.close('worldMap'); } catch (e) {}
+    }
+    // Map data is fetched asynchronously after creation.
+    return waitFor(worldMapReady, 8000);
   }
 
   // Minimal context menu drawn over the map; the client's own menus are touch
@@ -701,6 +955,459 @@ function gameHook() {
     emit({ type: 'travel-hook', ok: true });
   }
 
+  // In-game toast, styled like the client's own transient messages, so an
+  // interruption is visible where the player is actually looking instead of
+  // only in the launcher console.
+  function toast(text, kind) {
+    try {
+      var root = document.getElementById('stakk-toasts');
+      if (!root) {
+        root = document.createElement('div');
+        root.id = 'stakk-toasts';
+        root.style.cssText = [
+          'position:fixed', 'top:64px', 'left:50%', 'transform:translateX(-50%)',
+          'z-index:99998', 'display:flex', 'flex-direction:column', 'gap:6px',
+          'align-items:center', 'pointer-events:none',
+        ].join(';');
+        document.body.appendChild(root);
+      }
+      var colors = {
+        warn:  { bg: 'rgba(120,72,20,.95)',  bd: '#d79a3c' },
+        info:  { bg: 'rgba(30,42,60,.95)',   bd: '#6f9bd1' },
+        good:  { bg: 'rgba(32,72,40,.95)',   bd: '#79c06a' },
+      };
+      var c = colors[kind] || colors.info;
+      var el = document.createElement('div');
+      el.textContent = text;
+      el.style.cssText = [
+        'background:' + c.bg, 'border:1px solid ' + c.bd, 'border-radius:4px',
+        'color:#f2e9d6', 'font:13px/1.3 sans-serif', 'padding:7px 14px',
+        'box-shadow:0 2px 10px rgba(0,0,0,.5)', 'opacity:0',
+        'transition:opacity .18s, transform .18s', 'transform:translateY(-6px)',
+        'max-width:80vw', 'text-align:center',
+      ].join(';');
+      root.appendChild(el);
+      requestAnimationFrame(function () {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+      });
+      setTimeout(function () {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-6px)';
+        setTimeout(function () { el.remove(); }, 220);
+      }, 2600);
+    } catch (e) {}
+  }
+
+  // --- Auto-harvest ----------------------------------------------------------
+  // Gather every resource the character can actually use on the current map,
+  // then travel to the next point of a user-defined circuit and repeat.
+  //
+  // Timings are deliberately randomised: a fixed cadence is the most obvious
+  // signature a gathering loop can have. This does not make the behaviour
+  // undetectable — a loop that never rests still looks like a loop.
+  // Any move or interaction the player triggers themselves cancels whatever the
+  // launcher is doing. The client funnels both through isoEngine, so patch
+  // those two entry points and flag calls that did not come from us.
+  // True while the launcher is driving the character. A fixed release delay was
+  // wrong: the client re-enters _movePlayerOnMap for the whole walk to a
+  // resource, which outlasts any timeout, and those internal calls then looked
+  // like the player acting and cancelled the run. So the flag stays up for as
+  // long as our operation does, and only a call arriving while nothing of ours
+  // is running counts as manual.
+  var selfDriving = 0;
+  function beginSelf() { selfDriving++; }
+  function endSelf() { if (selfDriving > 0) selfDriving--; }
+  function asSelf(fn) {
+    beginSelf();
+    try { return fn(); } finally {
+      // Cover the client's synchronous re-entry, then hand control back.
+      setTimeout(endSelf, 400);
+    }
+  }
+
+  var onManualAction = null;   // set by the features that want interrupting
+  function installManualWatch() {
+    try {
+      var iso = window.isoEngine;
+      if (!iso || iso.__stakkManualWatch) return;
+      iso.__stakkManualWatch = true;
+      ['_movePlayerOnMap', '_useInteractive'].forEach(function (name) {
+        var orig = iso[name];
+        if (typeof orig !== 'function') return;
+        iso[name] = function () {
+          if (!selfDriving && typeof onManualAction === 'function') {
+            try { onManualAction(name); } catch (e) {}
+          }
+          return orig.apply(this, arguments);
+        };
+      });
+    } catch (e) {}
+  }
+
+  // Cursors seen on non-gathering interactions: 0 is the generic "use" and 8 is
+  // a door. Everything else is treated as gatherable — an allow-list of cursor
+  // ids was tried and wrongly rejected ore ("Collecter"), so exclude only what
+  // is known not to be a resource.
+  var NON_HARVEST_CURSORS = [0, 8];
+
+  var harvest = {
+    on: false,
+    stage: 'idle',      // what the loop is doing right now
+    since: 0,           // when that stage started, to spot a stall
+    circuit: [],        // [{x, y}] world coordinates to cycle through
+    index: 0,
+    busy: false,
+    paused: false,      // set while in a fight
+    gathered: 0,
+    lastError: null,
+  };
+
+  function rnd(min, max) { return min + Math.random() * (max - min); }
+  function jitter(ms, spread) { return Math.round(ms * rnd(1 - spread, 1 + spread)); }
+
+  // Fight state, from whichever of the client's flags is present: isFighting
+  // alone was not reliable here (followers kept mirroring during a fight).
+  // Fight events set fightSeen as a belt-and-braces signal too.
+  var fightSeen = false;
+  function inFight() {
+    try {
+      // Pinned from a live fight: playerData.isFighting is true and
+      // fightManager.fightState is 1 once it runs.
+      var gui = window.gui, pd = gui && gui.playerData;
+      if (pd && pd.isFighting) return true;
+      var fm = gui && gui.fightManager;
+      if (fm && fm.fightState > 0) return true;
+      if (fightSeen) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  // Resources the client itself says this character can use right now:
+  // enabledSkills is already filtered on job level and tool, so no whitelist
+  // of our own is needed.
+  // An element's position lives on its graphic in identifiedElements, as
+  // `_position` — a cell number, not an object (statedElements is empty on
+  // gathering maps). Scene x/y are there too and give a truer distance than
+  // grid coordinates, since the isometric grid is not square.
+  var _elemPos = {};
+  function elementPos(id) {
+    if (id in _elemPos) return _elemPos[id];
+    var p = null;
+    try {
+      var g = window.isoEngine.mapRenderer.identifiedElements[id];
+      if (g) {
+        p = {
+          cell: typeof g._position === 'number' ? g._position
+              : (g._position && g._position.cellId != null ? g._position.cellId : null),
+          x: typeof g._x === 'number' ? g._x : g.x,
+          y: typeof g._y === 'number' ? g._y : g.y,
+        };
+        if (p.cell == null && p.x == null) p = null;
+      }
+    } catch (e) {}
+    _elemPos[id] = p;
+    return p;
+  }
+
+  function elementCell(id) {
+    var p = elementPos(id);
+    return p ? p.cell : null;
+  }
+
+  function harvestables() {
+    var out = [];
+    try {
+      var mr = window.isoEngine && window.isoEngine.mapRenderer;
+      if (!mr || !mr.isReady) return out;
+      var els = mr.interactiveElements || {};
+      // Interactive elements carry no cell of their own here (their keys are
+      // _type/elementId/elementTypeId/enabledSkills/disabledSkills/_name/_isDoor);
+      // position lives in statedElements. _useInteractive walks the character
+      // there by itself, so a cell is only useful for ordering — never require it.
+      var stated = mr.statedElements || {};
+      for (var id in els) {
+        var el = els[id];
+        if (!el) continue;
+        var skills = el.enabledSkills || [];
+        if (!skills.length) continue;      // nothing this character can do with it
+        if (el._isDoor) continue;          // doors are interactive, not resources
+        // Pick the gathering skill, if any. Two filters, because neither alone
+        // is enough: job id 1 ("Base") covers doors and generic "Utiliser", but
+        // workshops and paddocks carry a real job id while still not being
+        // resources. The cursor is what the client itself uses to decide which
+        // interaction icon to draw, so it separates gathering from operating.
+        var sk = null;
+        for (var s = 0; s < skills.length; s++) {
+          var c = skills[s];
+          if (!c || !c._parentJobId || c._parentJobId === 1) continue;
+          if (NON_HARVEST_CURSORS.indexOf(c._cursor) !== -1) continue;
+          sk = c;
+          break;
+        }
+        if (!sk) continue;
+        var st = stated[id];
+        var cell = st && (st.elementCellId != null ? st.elementCellId : st.cellId);
+        out.push({
+          elementId: el.elementId != null ? el.elementId : Number(id),
+          cell: cell == null ? null : cell,
+          skillUid: sk.skillInstanceUid != null ? sk.skillInstanceUid : sk.skillId,
+          name: sk._name || sk.nameId || '',
+          job: sk._parentJobName || '',
+        });
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  // Trigger one resource the way tapping it does. The client walks the
+  // character there itself and runs the job animation.
+  function useResource(r) {
+    try {
+      asSelf(function () { window.isoEngine._useInteractive(r.elementId, r.skillUid); });
+      return true;
+    } catch (e) {
+      harvest.lastError = String(e);
+      return false;
+    }
+  }
+
+  // A gather is done when the element stops being usable (it turns into its
+  // depleted state) or the character has been idle for a while.
+  // The character's animation says exactly what it is doing: the job animations
+  // ("AnimPioche", "AnimFaux", ...) play for the whole gather, and idle is
+  // "AnimStatique". Watching stillness alone detected the START of a gather,
+  // not its end, since the character stands still while harvesting.
+  function animBase() {
+    try {
+      var s = window.actorManager.userActor.animSymbol;
+      return (s && s.base) || '';
+    } catch (e) { return ''; }
+  }
+  function isGatherAnim() {
+    var b = animBase();
+    return !!b && !/statique|marche|course|run|walk/i.test(b);
+  }
+
+  async function waitGatherDone(r, timeoutMs) {
+    var t0 = Date.now();
+    var started = false, movingSince = null;
+
+    while (Date.now() - t0 < timeoutMs) {
+      if (!harvest.on || inFight()) return false;
+
+      // Phase 1: the client walks the character over. Cap it — an unreachable
+      // resource would otherwise keep it walking until the timeout.
+      if (!charIdle()) {
+        if (movingSince === null) movingSince = Date.now();
+        else if (Date.now() - movingSince > 12000) return false;
+      } else {
+        movingSince = null;
+      }
+
+      // Phase 2: the job animation runs, then returns to idle -> gathered.
+      // Require stillness too: whatever the walk animation is called in this
+      // client, it only plays while moving, so it cannot be mistaken for work.
+      if (charIdle() && isGatherAnim()) {
+        started = true;
+      } else if (started) {
+        return true;
+      }
+
+      // Gone from the usable list: harvested (or taken by someone else).
+      if (!harvestables().some(function (h) { return h.elementId === r.elementId; })) return true;
+
+      // Never walked and never animated: the request was refused.
+      if (!started && charIdle() && Date.now() - t0 > 4000) return false;
+
+      await tSleep(jitter(180, 0.3));
+    }
+    return started;
+  }
+
+  async function harvestCurrentMap() {
+    var done = {};
+    for (var pass = 0; pass < 40; pass++) {
+      if (!harvest.on || inFight()) return;
+      var list = harvestables().filter(function (r) { return !done[r.elementId]; });
+      if (!list.length) return;
+
+      // Nearest first, recomputed every pass: the character moves with each
+      // gather, so a distance measured once at the start goes stale immediately.
+      // Distance on the isometric grid. Dofus cells alternate half-step rows,
+      // so a cell id converts to map coordinates as:
+      //   row = floor(id / 14), col = id % 14
+      //   x = col + (row - (row & 1)) / 2 ... expressed below via the standard
+      //   (u, v) diagonal axes, on which straight-line distance is exact.
+      // Scene x/y are not usable here: the actor's are tweened mid-animation
+      // and some element graphics have none at all.
+      var W = 14;
+      var toUV = function (cell) {
+        var row = Math.floor(cell / W), col = cell % W;
+        var x = col + Math.floor(row / 2);
+        var y = Math.floor((row + 1) / 2) - col + (W - 1);
+        return { u: x, v: y };
+      };
+      var actor = window.actorManager.userActor;
+      var me = toUV(actor.cellId);
+      // Scene distance separates cells that tie on the grid (two elements can
+      // both be 3 cells away yet 77 vs 207 pixels away), so prefer it and fall
+      // back to the grid when a graphic carries no coordinates.
+      var mx = typeof actor._x === 'number' ? actor._x : null;
+      var my = typeof actor._y === 'number' ? actor._y : null;
+      var dist = function (r) {
+        var p = elementPos(r.elementId);
+        if (!p || p.cell == null) return 1e6;   // unknown position: take it last
+        if (mx != null && typeof p.x === 'number' && typeof p.y === 'number') {
+          return Math.sqrt((p.x - mx) * (p.x - mx) + (p.y - my) * (p.y - my));
+        }
+        var t = toUV(p.cell);
+        return (Math.abs(t.u - me.u) + Math.abs(t.v - me.v)) * 60;   // ~px per cell
+      };
+      list.sort(function (a, b) { return dist(a) - dist(b); });
+
+      var r = list[0];
+      done[r.elementId] = true;
+      harvest.stage = 'use:' + r.elementId;
+      harvest.since = Date.now();
+      if (!useResource(r)) continue;
+      // Held across the walk + animation: every engine call in between is ours.
+      beginSelf();
+      var ok;
+      try { ok = await waitGatherDone(r, 15000); } finally { endSelf(); }
+      harvest.stage = ok ? 'gathered' : 'skipped';
+      if (ok) {
+        harvest.gathered++;
+        emit({ type: 'harvest-progress', gathered: harvest.gathered,
+               name: r.name, job: r.job });
+      } else {
+        emit({ type: 'harvest-skip', name: r.name, id: r.elementId });
+      }
+      await tSleep(jitter(350, 0.5));
+    }
+  }
+
+  async function harvestLoop() {
+    if (harvest.busy) return;
+    harvest.busy = true;
+    try {
+      while (harvest.on) {
+        // A fight interrupts everything: wait it out rather than spinning.
+        if (inFight()) {
+          harvest.paused = true;
+          toast('Combat — récolte en pause', 'warn');
+          emit({ type: 'harvest-state', state: 'fight' });
+          while (harvest.on && inFight()) await tSleep(2000);
+          harvest.paused = false;
+          if (!harvest.on) break;
+          await tSleep(jitter(3000, 0.4));   // settle after the fight
+          continue;
+        }
+
+        await waitFor(function () {
+          return window.isoEngine.mapRenderer.isReady;
+        }, 10000);
+        _elemPos = {};   // element graphics are per-map
+        harvest.stage = 'harvesting';
+        harvest.since = Date.now();
+        await harvestCurrentMap();
+        if (!harvest.on) break;
+
+        if (!harvest.circuit.length) {
+          // No circuit: nothing left here, so wait for respawns. Poll rather
+          // than sleeping through it, or a resource popping back looks like a
+          // stall until the full delay elapses.
+          harvest.stage = 'waiting-respawn';
+          harvest.since = Date.now();
+          for (var w = 0; w < 40 && harvest.on; w++) {
+            await tSleep(jitter(1500, 0.3));
+            if (inFight()) break;
+            if (harvestables().length) break;
+          }
+          continue;
+        }
+
+        // Next point of the circuit, wrapping around.
+        harvest.index = (harvest.index + 1) % harvest.circuit.length;
+        var next = harvest.circuit[harvest.index];
+        harvest.stage = 'travel:' + next.x + ',' + next.y;
+        harvest.since = Date.now();
+        emit({ type: 'harvest-state', state: 'travel', x: next.x, y: next.y });
+        await tSleep(jitter(1500, 0.5));
+        await travelTo({ worldX: next.x, worldY: next.y });
+        await tSleep(jitter(1200, 0.5));
+      }
+    } catch (e) {
+      harvest.lastError = String(e);
+    }
+    harvest.busy = false;
+    toast('Récolte terminée — ' + harvest.gathered + ' ressource(s)', 'info');
+    emit({ type: 'harvest-state', state: 'stopped', gathered: harvest.gathered });
+  }
+
+  // Join a fight another account just started. The join request is only valid
+  // from the fight's map during placement, so travel there first if needed —
+  // placement lasts long enough for a few map hops.
+  async function joinFight(p) {
+    try {
+      if (inFight() || p.fightId == null) return;
+      var iso = window.isoEngine;
+      if (iso.mapRenderer.mapId !== p.mapId) {
+        toast('Rejoint le combat du chef…', 'info');
+        var dir = neighbourDir(p.mapId);
+        if (dir) {
+          // Adjacent map: one border hop, no world-map data needed.
+          beginSelf();
+          try { await hopToward(0, 0, [dir]); } finally { endSelf(); }
+        } else {
+          if (p.x == null) return;
+          await travelTo({ worldX: p.x, worldY: p.y });
+        }
+        await waitFor(function () { return iso.mapRenderer.mapId === p.mapId && iso.mapRenderer.isReady; }, 5000);
+        if (iso.mapRenderer.mapId !== p.mapId) return;
+      }
+      await tSleep(jitter(900, 0.4));
+      // The challenge message usually joined already; only ask if it did not.
+      if (!inFight()) send('GameFightJoinRequestMessage', { fighterId: p.playerId, fightId: p.fightId });
+    } catch (e) {}
+  }
+
+  // Stop everything the launcher is driving. Called when the player acts.
+  function abortAutomation(what) {
+    var stopped = [];
+    if (harvest.on) { harvest.on = false; stopped.push('récolte'); }
+    if (!travelAbort) { travelAbort = true; stopped.push('trajet'); }
+    if (stopped.length) {
+      harvest.stage = 'interrupted:' + what;
+      harvest.since = Date.now();
+      toast(stopped.join(' + ') + ' interrompu' + (stopped.length > 1 ? 's' : '') +
+            ' (action manuelle)', 'warn');
+      emit({ type: 'automation-interrupted', by: what, stopped: stopped });
+    }
+  }
+
+  function harvestStart(circuit) {
+    if (Array.isArray(circuit)) harvest.circuit = circuit.filter(function (p) {
+      return p && typeof p.x === 'number' && typeof p.y === 'number';
+    });
+    if (harvest.on) return;
+    harvest.on = true;
+    harvest.gathered = 0;
+    harvest.index = 0;
+    _elemPos = {};
+    installManualWatch();
+    onManualAction = abortAutomation;
+    toast('Récolte auto activée' + (harvest.circuit.length
+      ? ' — circuit de ' + harvest.circuit.length + ' points' : ''), 'good');
+    emit({ type: 'harvest-state', state: 'started', points: harvest.circuit.length });
+    harvestLoop();
+  }
+
+  function harvestStop() {
+    harvest.on = false;
+    travelAbort = true;
+  }
+
   function travelDebug() {
     var out = { ping: 'alive' };
     function probe(name, fn) {
@@ -818,7 +1525,6 @@ function gameHook() {
   // Click the game's own "show entities" HUD toggle (the one that pops the
   // monster group boxes). Located in the DOM because its label lives in the
   // language files, not the script bundle.
-  var entitiesSelector = null;
 
   // Build a selector from an element's own classes, dropping volatile state
   // classes so it still matches after the toggle flips them.
@@ -832,26 +1538,6 @@ function gameHook() {
       if (classes.length) return el.tagName.toLowerCase() + '.' + classes.join('.');
     }
     return null;
-  }
-
-  // One-shot: the next tap in the game records its (stable-classed) target as
-  // the toggle. Uses pointerdown so it fires before the game can restyle the
-  // button, and walks up to the first ancestor that has a usable class.
-  function captureEntitiesButton() {
-    var onDown = function (ev) {
-      document.removeEventListener('pointerdown', onDown, true);
-      document.removeEventListener('mousedown', onDown, true);
-      var node = ev.target, sel = null;
-      for (var i = 0; node && i < 4; i++, node = node.parentElement) {
-        sel = cssPathOf(node);
-        if (sel && document.querySelectorAll(sel).length === 1) break;
-      }
-      entitiesSelector = sel || cssPathOf(ev.target);
-      emit({ type: 'entities-selector', selector: entitiesSelector });
-      emit({ type: 'entities-debug', phase: 'capture', selector: entitiesSelector, tag: ev.target.tagName });
-    };
-    document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('mousedown', onDown, true);
   }
 
   // Tap an element the way the touch-first client expects. Real coordinates at
@@ -891,7 +1577,7 @@ function gameHook() {
       }
     } catch (e) {}
     // Fallback: tap the real HUD button (hold semantics), or a captured one.
-    return tapElement(document.querySelector('.monsterInfoButton') || (entitiesSelector ? document.querySelector(entitiesSelector) : null));
+    return tapElement(document.querySelector('.monsterInfoButton'));
   }
 
   // Session gains read straight from playerData (message names vary by build).
@@ -1071,6 +1757,7 @@ function gameHook() {
       p.names.forEach(function (name) {
         send('PartyInvitationRequestMessage', { name: name });
       });
+      emit({ type: 'party-debug', what: 'invites envoyées', data: p.names });
     } else if (p.type === 'expect-invite') {
       // Auto-accept the next party invite from this leader (own account), briefly.
       expectInviteFrom = p.from;
@@ -1081,9 +1768,10 @@ function gameHook() {
       try {
         var pd = window.gui && window.gui.playerData && window.gui.playerData.partyData;
         var party = pd && pd.getClassicalParty && pd.getClassicalParty();
-        if (party && party.partyId) {
+        var partyId = party && (party._partyId != null ? party._partyId : party.partyId);
+        if (partyId) {
           send('PartyFollowThisMemberRequestMessage', {
-            partyId: party.partyId,
+            partyId: partyId,
             playerId: p.leaderId,
             enabled: p.enabled !== false,
           });
@@ -1093,10 +1781,6 @@ function gameHook() {
       send('GameFightReadyMessage', { isReady: p.value !== false });
     } else if (p.type === 'action') {
       doAction(p.action);
-    } else if (p.type === 'capture-entities') {
-      captureEntitiesButton();
-    } else if (p.type === 'entities-selector') {
-      entitiesSelector = p.selector || null;
     } else if (p.type === 'resource-overlay') {
       showResources = !!p.on;
       setResourceOverlay(showResources);
@@ -1106,16 +1790,21 @@ function gameHook() {
     } else if (p.type === 'own-accounts') {
       ownIds = {};
       (p.ids || []).forEach(function (id) { ownIds[id] = true; });
+      ownNames = {};
+      (p.names || []).forEach(function (n) { ownNames[n] = true; });
       autoAccept = !!p.autoAccept;
       autoAcceptGroup = !!p.autoAcceptGroup;
+      joinLeaderFight = !!p.joinLeaderFight;
     } else if (p.type === 'hide-shop') {
       hideShop = !!p.on;
       setHideShop(hideShop);
     } else if (p.type === 'get-position') {
       var pos = readPosition();
-      emit({ type: 'position', mapId: pos.mapId, cellId: pos.cellId });
+      emit({ type: 'position', mapId: pos.mapId, cellId: pos.cellId, x: pos.x, y: pos.y,
+             isPartyLeader: isPartyLeader(), inParty: partyLeaderId() != null,
+             inFight: inFight() });
     } else if (p.type === 'mule-follow') {
-      muleFollow(p.mapId, p.cellId);
+      muleFollow(p.mapId, p.cellId, p.x, p.y);
     } else if (p.type === 'capture-portrait') {
       tryEmitPortrait();
     } else if (p.type === 'travel') {
@@ -1129,6 +1818,26 @@ function gameHook() {
       try { r = { ok: true, value: eval(p.code) }; } catch (e) { r = { ok: false, error: String(e) }; }
       try { JSON.stringify(r); } catch (e) { r = { ok: r.ok, value: String(r.value) }; }
       emit({ type: 'eval-result', data: r });
+    } else if (p.type === 'harvest-start') {
+      harvestStart(p.circuit);
+    } else if (p.type === 'harvest-stop') {
+      harvestStop();
+    } else if (p.type === 'join-fight') {
+      joinFight(p);
+    } else if (p.type === 'harvest-toggle') {
+      if (harvest.on) harvestStop(); else harvestStart(p.circuit);
+    } else if (p.type === 'harvest-status') {
+      emit({ type: 'harvest-status', data: {
+        on: harvest.on, paused: harvest.paused, gathered: harvest.gathered,
+        circuit: harvest.circuit, index: harvest.index,
+        available: harvestables().length, lastError: harvest.lastError,
+        stage: harvest.stage,
+        stageAgeMs: harvest.since ? Date.now() - harvest.since : null,
+        busy: harvest.busy, inFight: inFight(),
+        charMoving: !charIdle(), mapReady: (function () {
+          try { return window.isoEngine.mapRenderer.isReady; } catch (e) { return null; }
+        })(),
+      } });
     } else if (p.type === 'travel-debug') {
       emit({ type: 'travel-debug', data: travelDebug() });
     } else if (p.type === 'windows-debug') {
@@ -1163,6 +1872,126 @@ function gameHook() {
 
     // A fighter's turn started. For our own character the fighter id equals the
     // player id, so tell the host it is this account's turn.
+    // The leader started a fight: tell the host so the other accounts can
+    // join it during the placement phase. Coordinates travel with it so a
+    // follower on another map can come over first.
+    // A fight became visible on this map (the swords). If the party leader is
+    // in it, join: local to the follower, nothing needed from the host. The
+    // leader's own start event only serves to bring a remote follower onto the
+    // map, after which this fires on arrival.
+    gui.on('GameRolePlayShowChallengeMessage', function (msg) {
+      try {
+        if (!joinLeaderFight || inFight()) return;
+        var leader = partyLeaderId();
+        if (leader == null || leader === gui.playerData.id) return;
+        var info = msg && (msg.commonsInfos || msg.commonInfos || msg);
+        var teams = (info && info.fightTeams) || [];
+        var found = false;
+        for (var t = 0; t < teams.length && !found; t++) {
+          var members = teams[t].teamMembers || [];
+          for (var m = 0; m < members.length; m++) {
+            if (members[m] && members[m].id === leader) { found = true; break; }
+          }
+          if (!found && teams[t].leaderId === leader) found = true;
+        }
+        emit({ type: 'join-fight-seen', fightId: info && info.fightId, leaderInIt: found });
+        if (!found) return;
+        setTimeout(function () {
+          send('GameFightJoinRequestMessage', { fighterId: leader, fightId: info.fightId });
+          toast('Rejoint le combat du chef', 'info');
+        }, jitter(700, 0.5));
+      } catch (e) {}
+    });
+
+    ['PartyCannotJoinErrorMessage', 'PartyInvitationCancelledForGuestMessage', 'PartyRefuseInvitationNotificationMessage'].forEach(function (name) {
+      gui.on(name, function (m) { emit({ type: 'party-debug', what: name, data: m && (m.reason != null ? m.reason : '') }); });
+    });
+    // Robust join path: the client keeps every fight in placement on this map
+    // in fightManager.notStartedFightList (pinned from a live session: entries
+    // are FightCommonInformations with fightTeams[].leaderId / teamMembers[]).
+    // Poll it — the challenge event never fired here — and join the one led
+    // by the party leader, once per fight id.
+    var joinedFights = {};
+    setInterval(function () {
+      try {
+        if (!joinLeaderFight || inFight()) return;
+        var leader = partyLeaderId();
+        if (leader == null || leader === gui.playerData.id) return;
+        var list = gui.fightManager && gui.fightManager.notStartedFightList;
+        if (!list || !list.length) return;
+        for (var i = 0; i < list.length; i++) {
+          var f = list[i];
+          if (!f || f.fightId == null || joinedFights[f.fightId]) continue;
+          var teams = f.fightTeams || [], hit = false;
+          for (var t = 0; t < teams.length && !hit; t++) {
+            if (teams[t].leaderId === leader) hit = true;
+            var mem = teams[t].teamMembers || [];
+            for (var m = 0; m < mem.length && !hit; m++) if (mem[m] && mem[m].id === leader) hit = true;
+          }
+          if (!hit) continue;
+          joinedFights[f.fightId] = true;
+          (function (fid) {
+            setTimeout(function () {
+              if (inFight()) return;
+              send('GameFightJoinRequestMessage', { fighterId: leader, fightId: fid });
+              toast('Rejoint le combat du chef', 'info');
+              emit({ type: 'party-debug', what: 'join-fight envoyé', data: { fightId: fid, leader: leader } });
+            }, jitter(250, 0.6));
+          })(f.fightId);
+        }
+      } catch (e) {}
+    }, 300);
+
+    // Placement: the server broadcasts every fighter's ready flag to the whole
+    // fight. When the party leader's flips on, follow suit.
+    // Placement: the server broadcasts every fighter's ready flag to the whole
+    // fight as GameFightHumanReadyStateMessage {characterId, isReady}. The
+    // client handles it on its connection manager (not re-emitted on gui) and
+    // then calls actorManager.setReadyIconOnActor(id, isReady) — so hook that
+    // call, which fires for every fighter whatever the message path.
+    function onFighterReady(id, isReady) {
+      try {
+        if (!joinLeaderFight || !isReady) return;
+        var leader = partyLeaderId();
+        if (leader == null || id !== leader || id === gui.playerData.id) return;
+        emit({ type: 'party-debug', what: 'chef prêt -> je me mets prêt', data: { leader: leader } });
+        setTimeout(function () { send('GameFightReadyMessage', { isReady: true }); }, jitter(350, 0.6));
+      } catch (e) {}
+    }
+    try {
+      var am = window.actorManager;
+      if (am && typeof am.setReadyIconOnActor === 'function' && !am.__stakkReadyHook) {
+        am.__stakkReadyHook = true;
+        var origReady = am.setReadyIconOnActor;
+        am.setReadyIconOnActor = function (id, isReady) {
+          onFighterReady(id, isReady);
+          return origReady.apply(this, arguments);
+        };
+      }
+    } catch (e) {}
+    // Also listen on the connection manager directly (window.dofus.connectionManager).
+    try {
+      var cm = window.dofus && window.dofus.connectionManager;
+      if (cm && typeof cm.on === 'function') {
+        cm.on('GameFightHumanReadyStateMessage', function (e) { onFighterReady(e && e.characterId, e && e.isReady); });
+      }
+    } catch (e) {}
+
+    gui.on('GameFightStartMessage', function () { fightSeen = true; });
+    gui.on('GameFightEndMessage', function () { fightSeen = false; });
+    gui.on('GameContextDestroyMessage', function () { fightSeen = false; });
+    gui.on('GameFightStartingMessage', function (msg) {
+      fightSeen = true;
+      try {
+        var c = mapCoords();
+        emit({ type: 'fight-started', fightId: msg && msg.fightId,
+               playerId: gui.playerData.id,
+               isPartyLeader: isPartyLeader(), inParty: partyLeaderId() != null,
+               mapId: window.isoEngine.mapRenderer.mapId,
+               x: c ? c.x : null, y: c ? c.y : null });
+      } catch (e) {}
+    });
+
     gui.on('GameFightTurnStartMessage', function (msg) {
       try {
         if (msg && msg.id === gui.playerData.id) emit({ type: 'my-turn' });
@@ -1174,9 +2003,18 @@ function gameHook() {
     gui.on('PartyInvitationMessage', function (msg) {
       try {
         if (!msg) return;
-        if (autoAcceptGroup || (expectInviteFrom && msg.fromName === expectInviteFrom)) {
+        emit({ type: 'party-debug', what: 'invitation reçue', data: {
+          from: msg.fromName, fromId: msg.fromId, expect: expectInviteFrom,
+          own: !!(ownIds[msg.fromId] || (msg.fromName && ownNames[msg.fromName])), autoGroup: autoAcceptGroup } });
+        // Auto-accept only invites coming from another of the launcher's own
+        // accounts (by player id, or name as a fallback), never from strangers.
+        var fromOwn = !!(ownIds[msg.fromId] || (msg.fromName && ownNames[msg.fromName]));
+        if ((autoAcceptGroup && fromOwn) || (expectInviteFrom && msg.fromName === expectInviteFrom)) {
           send('PartyAcceptInvitationMessage', { partyId: msg.partyId });
+          // Cancel the expiry too: an orphan timer would later null out the
+          // expectation armed by a second grouping within its 20s window.
           expectInviteFrom = null;
+          if (expectTimer) { clearTimeout(expectTimer); expectTimer = null; }
         } else {
           // A group invite the user has to answer: surface it so a background
           // tab still gets noticed.
@@ -1252,6 +2090,40 @@ function injectHook() {
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 }
+
+// Must run before the client reads navigator/screen, so it is injected as
+// early as the preload runs rather than waiting for the gui hook.
+function injectDeviceSpoof(profile) {
+  if (!profile) {
+    ipcRenderer.sendToHost('qol', { type: 'spoof-error', error: 'no-profile' });
+    return;
+  }
+  const run = () => {
+    try {
+      const root = document.head || document.documentElement;
+      if (!root) return false;
+      const script = document.createElement('script');
+      script.textContent = '(' + deviceSpoof.toString() + ')(' + JSON.stringify(profile) + ');' +
+        '(' + keepAlive.toString() + ')();';
+      root.appendChild(script);
+      script.remove();
+      return true;
+    } catch (err) {
+      ipcRenderer.sendToHost('qol', { type: 'spoof-error', error: String(err) });
+      return true;   // reported; don't spin
+    }
+  };
+  // The preload can run before <html> exists, in which case appendChild would
+  // throw and the spoof would silently never apply — retry until the document
+  // is there, and no later than DOM ready.
+  if (run()) return;
+  const iv = setInterval(() => { if (run()) clearInterval(iv); }, 5);
+  document.addEventListener('DOMContentLoaded', () => { clearInterval(iv); run(); }, { once: true });
+}
+
+ipcRenderer.invoke('spoof:profile').then(injectDeviceSpoof, (err) => {
+  ipcRenderer.sendToHost('qol', { type: 'spoof-error', error: String(err) });
+});
 
 // The client draws letterbox bars (.blackStripe) around the play area. Hide them
 // so the game fills the window instead of leaving black margins.
@@ -1381,6 +2253,8 @@ window.addEventListener(
       ipcRenderer.sendToHost('hotkey', hk);
       return;
     }
+    // Auto-repeat while a key is held would re-fire a toggle (show/hide/show…).
+    if (e.repeat) return;
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
     const action = plain ? keyToAction[e.key] : null;
     // A bound key triggers its game action on this (active) account, and mirrors

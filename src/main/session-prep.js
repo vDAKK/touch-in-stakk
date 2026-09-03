@@ -18,13 +18,26 @@ function installRequestLogging(sess, log) {
 
 const prepared = new WeakSet();
 
+// The device seed is derived from the session itself, never from the caller:
+// session.fromPartition() fires 'session-created' whose handler prepares the
+// session first (and the WeakSet then rejects the seeded call), which left
+// every account's HTTP user agent on profile 0 while the page reported its
+// own device — a mismatch servers read as a device change.
+function seedOf(sess) {
+  try {
+    const p = sess.getStoragePath && sess.getStoragePath();
+    if (p) return p;
+  } catch {}
+  return 0;
+}
+
 function prepareSession(sess, log) {
   if (prepared.has(sess)) return false;
   prepared.add(sess);
-  installSpoofing(sess);
+  installSpoofing(sess, seedOf(sess));
   blockThirdParty(sess);
   installRequestLogging(sess, log || (() => {}));
   return true;
 }
 
-module.exports = { prepareSession, blockThirdParty, installRequestLogging, THIRD_PARTY_BLOCK };
+module.exports = { prepareSession, seedOf, blockThirdParty, installRequestLogging, THIRD_PARTY_BLOCK };

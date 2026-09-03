@@ -1,38 +1,65 @@
 name: Build
 
-# Build installers on demand (Actions tab -> Build -> Run workflow) or on a tag.
+# Every push to master builds the Windows and macOS installers and keeps them
+# as workflow artifacts. A version tag (v1.2.3) additionally publishes them as
+# a GitHub release on this repository, which is what the in-app auto-updater
+# polls (build.publish in package.json).
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   build:
+    needs: test
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            script: dist:mac
+            target: --mac
+            name: mac
           - os: windows-latest
-            script: dist
+            target: --win
+            name: windows
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run ${{ matrix.script }}
+      # Tags publish a release; ordinary pushes only produce artifacts.
+      - name: Build (and publish on tag)
+        run: npx electron-builder ${{ matrix.target }} --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
         env:
-          # Unsigned build (no Apple / Windows certificate).
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned builds: no Apple / Windows code-signing certificate.
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - uses: actions/upload-artifact@v4
         with:
-          name: touch-in-stakk-${{ matrix.os }}
+          name: touch-in-stakk-${{ matrix.name }}
           path: |
             dist/*.dmg
             dist/*.zip
             dist/*.exe
-          if-no-files-found: ignore
+            dist/*.yml
+            dist/*.blockmap
+          if-no-files-found: error

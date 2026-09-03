@@ -6,13 +6,20 @@ const { app, BrowserWindow, ipcMain, session, shell, webContents } = require('el
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
+// Belt and braces for the webview attribute: force it on every webContents as
+// it is created, so an inactive account's game keeps a full frame rate.
+app.on('web-contents-created', (_e, wc) => {
+  try { wc.setBackgroundThrottling(false); } catch {}
+});
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const { loadSettings, saveSettings } = require('./settings');
 const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
 const { startProxy } = require('./proxy');
-const { prepareSession } = require('./session-prep');
+const { prepareSession, seedOf } = require('./session-prep');
+const { deviceProfile } = require('./spoof');
 const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
 const { initAutoUpdate } = require('./updater');
 
@@ -195,6 +202,13 @@ async function boot() {
 }
 
 ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
+// Live preview from the settings dialog: resize without saving. Cancel sends
+// the saved size back through the same channel.
+ipcMain.on('window:preview-size', (_e, w, h) => {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isFullScreen()) return;
+  if (Number.isFinite(w) && Number.isFinite(h) && w >= 960 && h >= 400) mainWindow.setSize(Math.round(w), Math.round(h), true);
+});
+
 ipcMain.handle('settings:set', (_e, partial) => {
   const saved = saveSettings(userDataDir(), partial);
   // Apply a new window size on the spot (unless the window is maximized or
@@ -235,6 +249,19 @@ ipcMain.handle('broadcast:key', (_e, wcIds, key) => {
   }
   return true;
 });
+// The device profile a game webview should present. Keyed by its session
+// partition, so each account gets one stable device of its own.
+ipcMain.handle('spoof:profile', (e) => {
+  try {
+    // Electron exposes no partition name on webContents, but each account's
+    // session object is distinct and its storage path carries the partition —
+    // enough for a stable per-account seed.
+    return deviceProfile(seedOf(e.sender.session));
+  } catch {
+    return deviceProfile(0);
+  }
+});
+
 ipcMain.handle('session:prepare', (_e, partition) => {
   prepareSession(session.fromPartition(partition), logToFile);
   return true;

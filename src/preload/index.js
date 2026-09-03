@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('touch', {
   accountsReorder: (ids) => ipcRenderer.invoke('accounts:reorder', ids),
   broadcastKey: (wcIds, key) => ipcRenderer.invoke('broadcast:key', wcIds, key),
   prepareSession: (partition) => ipcRenderer.invoke('session:prepare', partition),
+  previewSize: (w, h) => ipcRenderer.send('window:preview-size', w, h),
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
