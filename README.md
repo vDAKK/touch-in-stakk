@@ -21,12 +21,28 @@ Télécharge la dernière version dans [Releases](../../releases) :
 | Windows (installeur) | `Touch-in-STAKK-Setup-<version>.exe` |
 | Windows (portable) | `Touch-in-STAKK-portable-<version>.exe` |
 
-Les builds ne sont pas signés. Sur macOS, au premier lancement : clic droit →
-Ouvrir (ou `xattr -dr com.apple.quarantine "/Applications/Touch in STAKK.app"`).
-Sur Windows, SmartScreen demandera une confirmation.
+### macOS : installation en une commande
 
-L'application se met à jour toute seule : elle surveille les releases GitHub et
-propose l'installation quand une nouvelle version est prête.
+Les builds ne sont pas signés par Apple, donc Gatekeeper bloque le `.dmg`
+téléchargé (« logiciel malveillant »). Ce script télécharge la dernière version,
+l'installe dans /Applications et lève le blocage :
+
+```
+curl -fsSL https://raw.githubusercontent.com/vDAKK/touch-in-stakk/master/install.sh | sh
+```
+
+À la main, c'est équivalent à : copier l'app dans /Applications puis
+`xattr -dr com.apple.quarantine "/Applications/Touch in STAKK.app"`.
+
+Sur Windows, SmartScreen demande une confirmation (« Informations complémentaires
+→ Exécuter quand même »).
+
+### Mises à jour
+
+Sur Windows, l'application se met à jour toute seule (surveille les releases,
+télécharge, propose l'installation). Sur macOS, l'installation automatique d'une
+mise à jour exige une application signée — relance le script ci-dessus pour
+passer à la version suivante.
 
 ## Fonctions
 
