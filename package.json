@@ -39,7 +39,8 @@
       {
         "provider": "github",
         "owner": "vDAKK",
-        "repo": "touch-in-stakk"
+        "repo": "touch-in-stakk",
+        "releaseType": "release"
       }
     ],
     "win": {
