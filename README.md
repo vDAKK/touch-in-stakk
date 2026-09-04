@@ -3,7 +3,7 @@
 Launcher desktop pour **Dofus Touch** (macOS / Windows), pensé pour le multi-compte.
 Il charge le client officiel du jeu dans une fenêtre par compte, se présente aux
 serveurs comme une tablette Android, et ajoute par-dessus les outils qui manquent
-sur PC : suivi du chef de groupe, jonction automatique des combats, récolte
+sur PC : suivi du chef de groupe, join automatique des combats, récolte
 automatique, déplacement auto sur la carte, raccourcis clavier, diffusion des
 touches.
 
