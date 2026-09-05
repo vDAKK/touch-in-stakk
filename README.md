@@ -1,4 +1,4 @@
-# Touch in STAKK
+# Dofus TOUCH - Touch in STAKK
 
 Launcher desktop pour **Dofus Touch** (macOS / Windows), pensé pour le multi-compte.
 Il charge le client officiel du jeu dans une fenêtre par compte, se présente aux
