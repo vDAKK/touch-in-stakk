@@ -7,6 +7,10 @@ sur PC : suivi du chef de groupe, join automatique des combats, récolte
 automatique, déplacement auto sur la carte, raccourcis clavier, diffusion des
 touches.
 
+Ce launcher se base sur le travail de d'autres launcher existant Open Source ou Non, 
+nettoyé du code "malveillant", type récupération des informations personnel de l'utilisateur, 
+capture d'écran de bureau etc.
+
 > Non affilié à Ankama Games. Se présenter comme le client Android peut violer les
 > CGU de Dofus Touch — usage à tes risques, avec tes propres identifiants uniquement.
 
