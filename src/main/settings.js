@@ -1,7 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DEFAULT_SETTINGS = { resolution: { width: 1440, height: 800 }, muted: false, muteInactive: false, switchOnTurn: true, notifications: true, autoAcceptOwn: true, noConfirm: true, showResources: false, entitiesSelector: null, autoAcceptGroup: false, joinLeaderFight: false, hideShop: false, tabBarSide: false, keybinds: {} };
+// resolutionSet stays false until the user picks a size themselves; while it
+// is false the window opens at the screen's usable area instead of the
+// nominal default below.
+const DEFAULT_SETTINGS = { resolution: { width: 1440, height: 800 }, resolutionSet: false, muted: false, muteInactive: false, switchOnTurn: true, notifications: true, autoAcceptOwn: true, noConfirm: true, showResources: false, entitiesSelector: null, autoAcceptGroup: false, joinLeaderFight: false, hideShop: false, tabBarSide: false, keybinds: {} };
 
 function settingsPath(userDataDir) {
   return path.join(userDataDir, 'settings.json');

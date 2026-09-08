@@ -50,10 +50,6 @@ const KEYBIND_ACTIONS = [
   { id: 'spell8', label: 'Sort 8', defaultKey: '8' },
 ];
 
-$('min').onclick = () => window.touch.windowMinimize();
-$('max').onclick = () => window.touch.windowToggleMaximize();
-$('close').onclick = () => window.touch.windowClose();
-
 // Community link. Replace with your own invite; opened in the default browser
 // (main restricts app:open-external to https).
 const STAKK_DISCORD_URL = 'https://discord.gg/7R2tFcAkMy';
@@ -69,23 +65,30 @@ const RESOLUTION_PRESETS = [
   { label: 'XL', width: 1920, height: 1067 },
 ];
 const GAME_RATIO = 1440 / 800;
-// Width and height stay linked on the game's ratio: editing either one, the
-// slider or a preset updates the rest, and the window follows live as a
-// preview (Annuler puts it back).
+// Width and height are independent: the window is free-form and the game
+// letterboxes inside it. The slider drives both on the game's ratio (capped by
+// the screen) as a convenience; the number inputs override either one alone.
+// The window follows live as a preview (Annuler puts it back).
 function setResolution(w, h, source) {
   const maxW = Math.max(960, screen.availWidth);
-  if (source === 'height') w = Math.round(h * GAME_RATIO);
+  const maxH = Math.max(600, screen.availHeight);
+  if (source === 'slider') h = Math.round(w / GAME_RATIO);
+  if (source === 'width') h = Number($('res-h').value);
+  if (source === 'height') w = Number($('res-w').value);
   w = Math.min(maxW, Math.max(960, Math.round(w)));
-  h = Math.round(w / GAME_RATIO);
+  h = Math.min(maxH, Math.max(600, Math.round(h)));
   if (source !== 'width') $('res-w').value = w;
   if (source !== 'height') $('res-h').value = h;
   $('res-slider').value = w;
   const fit = Math.round((w / screen.availWidth) * 100);
-  $('res-hint').textContent = fit >= 100 ? 'Plein écran' : fit + ' % de l\'écran';
+  $('res-hint').textContent = fit >= 100 ? 'Pleine largeur' : fit + ' % de l\'écran';
   markActivePreset();
   previewResolution(w, h);
 }
 let previewTimer = null;
+// The window size the settings dialog opened at, so Annuler restores what was
+// on screen rather than the nominal saved resolution.
+let sizeBeforePreview = null;
 function previewResolution(w, h) {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => window.touch.previewSize(w, h), 120);
@@ -93,14 +96,16 @@ function previewResolution(w, h) {
 function renderPresets() {
   const box = $('res-presets');
   box.innerHTML = '';
-  const fitW = Math.min(screen.availWidth, Math.round(screen.availHeight * GAME_RATIO));
+  // 'Écran' is the display's usable area exactly — no ratio fit, since the
+  // window no longer has to match the game's aspect.
   const presets = [...RESOLUTION_PRESETS.filter((p) => p.width <= screen.availWidth),
-                   { label: 'Écran', width: fitW, height: Math.round(fitW / GAME_RATIO) }];
+                   { label: 'Écran', width: screen.availWidth, height: screen.availHeight }];
   for (const p of presets) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'preset-btn';
     b.dataset.w = p.width;
+    b.dataset.h = p.height;
     b.textContent = p.label + ' · ' + p.width + '×' + p.height;
     b.onclick = () => setResolution(p.width, p.height, 'preset');
     box.appendChild(b);
@@ -109,7 +114,10 @@ function renderPresets() {
 }
 function markActivePreset() {
   const w = Number($('res-w').value);
-  for (const b of $('res-presets').children) b.classList.toggle('active', Number(b.dataset.w) === w);
+  const h = Number($('res-h').value);
+  for (const b of $('res-presets').children) {
+    b.classList.toggle('active', Number(b.dataset.w) === w && Number(b.dataset.h) === h);
+  }
 }
 
 // Tab bar on top (default) or down the left side, per the user's choice.
@@ -225,7 +233,11 @@ async function reorder(draggedId, targetId) {
   renderTabs();
 }
 $('open-settings').onclick = openSettings;
-$('close-settings').onclick = () => { clearTimeout(previewTimer); window.touch.previewSize(settings.resolution.width, settings.resolution.height); (() => ($('settings-modal').hidden = true))(); };
+$('close-settings').onclick = () => {
+  clearTimeout(previewTimer);
+  if (sizeBeforePreview) window.touch.previewSize(sizeBeforePreview.width, sizeBeforePreview.height);
+  $('settings-modal').hidden = true;
+};
 $('save-settings').onclick = saveSettings;
 $('open-devtools').onclick = () => {
   const wv = activeId && document.getElementById(viewId(activeId));
@@ -837,9 +849,14 @@ async function removeTab(a) {
 
 async function openSettings() {
   const s = await window.touch.getSettings();
-  $('res-w').value = s.resolution.width;
-  $('res-h').value = s.resolution.height;
-  $('res-slider').value = s.resolution.width;
+  // Before the user picks a size the window is screen-sized, so show that
+  // rather than the nominal saved default.
+  sizeBeforePreview = { width: window.outerWidth, height: window.outerHeight };
+  const shownW = s.resolutionSet ? s.resolution.width : window.outerWidth;
+  const shownH = s.resolutionSet ? s.resolution.height : window.outerHeight;
+  $('res-w').value = shownW;
+  $('res-h').value = shownH;
+  $('res-slider').value = shownW;
   $('res-hint').textContent = '';
   markActivePreset();
   renderPresets();
@@ -847,7 +864,6 @@ async function openSettings() {
   $('res-w').oninput = () => setResolution(Number($('res-w').value), 0, 'width');
   $('res-h').oninput = () => setResolution(0, Number($('res-h').value), 'height');
   $('res-slider').oninput = () => setResolution(Number($('res-slider').value), 0, 'slider');
-  $('res-h').oninput = markActivePreset;
   $('tabbar-side').checked = !!s.tabBarSide;
   $('muted').checked = s.muted;
   $('mute-inactive').checked = !!s.muteInactive;
@@ -869,6 +885,9 @@ async function saveSettings() {
   const muted = $('muted').checked;
   settings = await window.touch.setSettings({
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
+    // The user has now chosen a size, so later launches use it instead of
+    // filling the screen.
+    resolutionSet: true,
     tabBarSide: $('tabbar-side').checked,
     muted,
     muteInactive: $('mute-inactive').checked,

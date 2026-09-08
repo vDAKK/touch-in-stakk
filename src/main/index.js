@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session, shell, webContents } = require('electron');
 
 // Same reason as backgroundThrottling below, at the process level: without
 // these Chromium still freezes timers and rendering for occluded/background
@@ -163,12 +163,22 @@ async function boot() {
   logToFile('boot: patchOk=' + patchOk + ' proxyPort=' + (proxy && proxy.port));
 
   const settings = loadSettings(userDataDir());
+  // Fill the display's usable area (screen minus menu bar / dock / taskbar) on
+  // a first run, so the app fits the screen out of the box; once the user has
+  // picked a size it wins, clamped to what the screen can show.
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const size = settings.resolutionSet
+    ? { width: Math.min(settings.resolution.width, workArea.width),
+        height: Math.min(settings.resolution.height, workArea.height) }
+    : workArea;
   mainWindow = new BrowserWindow({
-    width: settings.resolution.width,
-    height: settings.resolution.height,
+    width: size.width,
+    height: size.height,
     minWidth: 960,
     minHeight: 600,
-    frame: false,
+    // Native window chrome: real traffic lights and system title bar on macOS,
+    // real minimise/maximise/close on Windows and Linux.
+    frame: true,
     backgroundColor: '#14161c',
     title: 'Touch in STAKK',
     icon: path.join(__dirname, '../../build/icon.png'),
@@ -183,10 +193,6 @@ async function boot() {
       backgroundThrottling: false,
     },
   });
-
-  // Keep the game area at the client's aspect ratio (the chrome — titlebar +
-  // tab bar — is the fixed extra height), so resizing does not letterbox it.
-  mainWindow.setAspectRatio(1440 / 800, { width: 0, height: 80 });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAnkamaHost(url)) return { action: 'allow' };
@@ -206,7 +212,7 @@ ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
 // the saved size back through the same channel.
 ipcMain.on('window:preview-size', (_e, w, h) => {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isFullScreen()) return;
-  if (Number.isFinite(w) && Number.isFinite(h) && w >= 960 && h >= 400) mainWindow.setSize(Math.round(w), Math.round(h), true);
+  if (Number.isFinite(w) && Number.isFinite(h) && w >= 960 && h >= 600) mainWindow.setSize(Math.round(w), Math.round(h), true);
 });
 
 ipcMain.handle('settings:set', (_e, partial) => {
@@ -271,12 +277,6 @@ ipcMain.handle('session:prepare', (_e, partition) => {
 ipcMain.on('debug:log', (_e, tag, data) => {
   try { logToFile(String(tag) + ' ' + JSON.stringify(data)); } catch { logToFile(String(tag) + ' <unserializable>'); }
 });
-ipcMain.on('window:minimize', () => mainWindow && mainWindow.minimize());
-ipcMain.on('window:toggle-maximize', () => {
-  if (!mainWindow) return;
-  mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
-});
-ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 ipcMain.on('window:toggle-fullscreen', () => {
   if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
 });
