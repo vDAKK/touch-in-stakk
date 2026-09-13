@@ -91,7 +91,7 @@
       "artifactName": "Touch-in-STAKK-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Touch in STAKK ${version}"
+      "title": "Touch in STAKK ${version} ${arch}"
     }
   }
 }
