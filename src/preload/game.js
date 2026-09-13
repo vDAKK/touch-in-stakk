@@ -1162,7 +1162,9 @@ function gameHook(strings) {
           cell: cell == null ? null : cell,
           skillUid: sk.skillInstanceUid != null ? sk.skillInstanceUid : sk.skillId,
           name: sk._name || sk.nameId || '',
-          job: sk._parentJobName || '',
+          // The resource itself: the skill's name is the verb ("Faucher"),
+          // the element's is what the player sees ("Blé").
+          elName: el._name || '',
         });
       }
     } catch (e) {}
@@ -1497,37 +1499,69 @@ function gameHook(strings) {
     return d;
   }
 
+  // The same source the auto-harvest walks on: interactive elements carry no
+  // cell of their own, so the position comes from the element's graphic
+  // (scene x/y) and, failing that, from the cell statedElements reports.
   function resourcePoints() {
     var out = [];
     try {
-      var mr = window.isoEngine && window.isoEngine.mapRenderer;
-      if (!mr) return out;
-      var els = mr.interactiveElements || {};
-      var ident = mr.identifiedElements || {};
-      for (var id in els) {
-        var el = els[id];
-        if (!el) continue;
-        var idn = ident[id];
-        var cell = el.elementCellId;
-        if (cell == null) cell = el.cellId;
-        if (cell == null && idn) cell = idn.elementCellId != null ? idn.elementCellId : idn.cellId;
-        if (cell == null) continue;
-        var name = '';
-        try {
-          var sk = el.enabledSkills && el.enabledSkills[0];
-          name = (sk && (sk.nameId || sk.name)) || '';
-        } catch (e) {}
-        out.push({ cell: cell, name: name });
-      }
-      if (!resOverlay.sampled) {
-        resOverlay.sampled = true;
-        var k = Object.keys(els)[0];
-        console.log('[qol-res] elements=' + Object.keys(els).length +
-          ' sampleKeys=' + JSON.stringify(k ? Object.keys(els[k]) : null) +
-          ' resolved=' + out.length);
-      }
+      harvestables().forEach(function (r) {
+        var pos = elementPos(r.elementId);
+        var cell = r.cell != null ? r.cell : (pos ? pos.cell : null);
+        if ((!pos || pos.x == null) && cell == null) return;
+        out.push({ x: pos ? pos.x : null, y: pos ? pos.y : null, cell: cell,
+                   name: r.elName || r.name });
+      });
     } catch (e) {}
     return out;
+  }
+
+  // Scene coordinates -> pixels on screen. The client exposes this under
+  // different names depending on the build, so try each and report which one
+  // answered (the diagnostic below reads it).
+  var _projectVia = null;
+  function sceneToScreen(x, y) {
+    var fg = window.foreground;
+    var scene = window.isoEngine && window.isoEngine.mapScene;
+    var tries = [
+      ['foreground.convertSceneToScreenCoordinate', fg && fg.convertSceneToScreenCoordinate, fg],
+      ['mapScene.convertSceneToScreenCoordinate', scene && scene.convertSceneToScreenCoordinate, scene],
+      ['mapScene.convertSceneToCanvasCoordinate', scene && scene.convertSceneToCanvasCoordinate, scene],
+    ];
+    for (var i = 0; i < tries.length; i++) {
+      var fn = tries[i][1];
+      if (typeof fn !== 'function') continue;
+      try {
+        var s = fn.call(tries[i][2], x, y);
+        if (s && s.x != null && s.y != null) {
+          _projectVia = tries[i][0];
+          return s;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  // What the overlay could and could not resolve, sent once per activation to
+  // the launcher log: without it a silent empty overlay says nothing.
+  function reportOverlayDiag() {
+    try {
+      var mr = window.isoEngine && window.isoEngine.mapRenderer;
+      var els = (mr && mr.interactiveElements) || {};
+      var pts = resourcePoints();
+      var first = pts[0];
+      emit({
+        type: 'resource-debug',
+        interactive: Object.keys(els).length,
+        harvestables: harvestables().length,
+        points: pts.length,
+        withScene: pts.filter(function (p) { return p.x != null; }).length,
+        projectedVia: first ? (sceneToScreen(first.x, first.y) ? _projectVia : null) : null,
+        hasCellScene: !!(mr && typeof mr.getCellSceneCoordinate === 'function'),
+        hasForeground: !!window.foreground,
+        sample: first || null,
+      });
+    } catch (e) {}
   }
 
   // Click the game's own "show entities" HUD toggle (the one that pops the
@@ -1610,15 +1644,24 @@ function gameHook(strings) {
 
   function drawResourceOverlay() {
     var mr = window.isoEngine && window.isoEngine.mapRenderer;
-    var fg = window.foreground;
-    if (!mr || !fg || typeof fg.convertSceneToScreenCoordinate !== 'function' || typeof mr.getCellSceneCoordinate !== 'function') return;
+    if (!mr) return;
     var root = overlayRoot();
     root.innerHTML = '';
-    resourcePoints().forEach(function (p) {
+    var pts = resourcePoints();
+    if (pts.length && !resOverlay.sampled) {
+      resOverlay.sampled = true;
+      reportOverlayDiag();
+    }
+    pts.forEach(function (p) {
       try {
-        var sc = mr.getCellSceneCoordinate(p.cell);
-        if (!sc) return;
-        var s = fg.convertSceneToScreenCoordinate(sc.x, sc.y);
+        // Prefer the graphic's own scene position; fall back to the cell.
+        var sx = p.x, sy = p.y;
+        if (sx == null && p.cell != null && typeof mr.getCellSceneCoordinate === 'function') {
+          var sc = mr.getCellSceneCoordinate(p.cell);
+          if (sc) { sx = sc.x; sy = sc.y; }
+        }
+        if (sx == null) return;
+        var s = sceneToScreen(sx, sy);
         if (!s || s.x == null) return;
         var tag = document.createElement('div');
         tag.textContent = p.name || '•';
@@ -1642,6 +1685,7 @@ function gameHook(strings) {
       return;
     }
     drawResourceOverlay();
+    reportOverlayDiag();
     resOverlay.timer = setInterval(drawResourceOverlay, 300);
   }
 

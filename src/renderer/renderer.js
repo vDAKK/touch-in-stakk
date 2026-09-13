@@ -5,8 +5,8 @@ const $ = (id) => document.getElementById(id);
 // this file (the renderer has no bundler and no node integration, so it reads
 // the copy the file registers on globalThis).
 const I18N = globalThis.STAKK_I18N;
-let lang = 'fr';
-// What the Automatic setting resolves to on this machine, from the OS locale.
+let lang = 'fr';
+// What the Automatic setting resolves to on this machine, from the OS locale.
 let autoLang = 'en';
 const t = (key, params) => I18N.translate(lang, key, params);
 
@@ -548,6 +548,11 @@ function handleQol(accountId, msg) {
     // are invalid, so broken interface shortcuts can be pinned to correct ids.
     console.log('[windows-debug] account', accountId, JSON.stringify(msg.data, null, 2));
     window.touch.logDebug('[windows-debug]', msg.data);
+  } else if (msg.type === 'resource-debug') {
+    // Why the resource labels drew nothing: which elements were found, how many
+    // had a position, and which projection call answered.
+    console.log('[resources]', msg);
+    window.touch.logDebug('[resource-debug]', msg);
   } else if (msg.type === 'entities-debug') {
     window.touch.logDebug('[entities-debug]', msg);
   } else if (msg.type === 'disconnected') {
