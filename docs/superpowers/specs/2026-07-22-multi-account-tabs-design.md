@@ -1,4 +1,4 @@
-# Touch in STAKK — Sous-projet 1 : Multi-comptes + sessions persistantes
+# Touch in STAKK - Sous-projet 1 : Multi-comptes + sessions persistantes
 
 **Date**: 2026-07-22
 **But**: Gérer plusieurs comptes Dofus Touch dans une fenêtre à onglets, chaque compte avec sa session isolée et **persistée** (reconnexion automatique au relancement). Fondation pour les features QoL (sous-projet 2/3).
