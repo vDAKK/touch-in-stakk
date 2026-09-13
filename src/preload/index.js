@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('touch', {
   // The titlebar differs per OS: macOS draws its own window controls, the
   // others get the custom ones below.
   platform: process.platform,
+  // { lang, auto }: the language to draw, and what "Automatic" means here.
+  getLang: () => ipcRenderer.invoke('i18n:lang'),
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   windowClose: () => ipcRenderer.send('window:close'),

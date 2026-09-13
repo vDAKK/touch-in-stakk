@@ -1,5 +1,7 @@
 # Dofus Touch | Touch in STAKK
 
+**Français** · [English](README.en.md)
+
 Launcher desktop pour **Dofus Touch** (macOS / Windows), pensé pour le multi-compte.
 Il charge le client officiel du jeu dans une fenêtre par compte, se présente aux
 serveurs comme une tablette Android, et ajoute par-dessus les outils qui manquent
@@ -98,6 +100,14 @@ passer à la version suivante.
 - Les onglets en arrière-plan **continuent de tourner à pleine vitesse** : ni
   Chromium ni le client ne les ralentissent.
 
+### Langue
+Interface en **français ou en anglais**, y compris les messages affichés dans le
+jeu (« Courir ici », notifications de trajet et de récolte). Par défaut le
+launcher suit la langue du système — français sur une machine en français,
+anglais partout ailleurs — et le choix se force dans les réglages, appliqué
+immédiatement sans redémarrage. La langue du client Dofus lui-même reste celle de
+ton compte Ankama.
+
 ### Identité d'appareil
 Chaque compte se présente comme **une tablette Android différente et stable**
 (User-Agent HTTP, `navigator`, écran, touch, mémoire, cœurs — tous cohérents entre
@@ -105,7 +115,7 @@ eux). Un même compte garde le même appareil d'un lancement à l'autre.
 
 ## Réglages
 
-Bouton engrenage dans la barre. Taille de la fenêtre (curseur, presets,
+Bouton engrenage dans la barre. Langue, taille de la fenêtre (curseur, presets,
 adaptation à l'écran, aperçu en direct), son, multi-compte, confort, raccourcis.
 Sauvegardés dans `userData/settings.json`. Logs dans `userData/logs/app.log`.
 
@@ -153,6 +163,15 @@ suivi, la récolte, le trajet et les raccourcis.
 | `src/preload/game.js` | Hook injecté dans le jeu : suivi, combat, récolte, trajet, raccourcis |
 | `src/preload/index.js` | Pont IPC `window.touch` |
 | `src/renderer/` | Interface du launcher (onglets, barre, réglages) |
+| `src/i18n/strings.js` | Dictionnaires FR/EN, partagés par le main, les preloads et le renderer |
+
+## Traduire
+
+Toutes les chaînes vivent dans `src/i18n/strings.js`, un dictionnaire par langue.
+Le markup n'a pas de texte en dur : chaque élément porte un `data-i18n` (ou
+`data-i18n-title` / `data-i18n-aria`) rempli au chargement et à chaque changement
+de langue. `npm test` échoue si une clé manque d'un côté ou si du texte
+traduisible est écrit en dur dans le HTML.
 
 ## Publier une version
 

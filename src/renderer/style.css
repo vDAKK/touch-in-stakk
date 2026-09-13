@@ -444,6 +444,18 @@ body.side-tabs .bar-btn-end { margin-left: 0; margin-top: auto; }
 .toggle-field { cursor: pointer; }
 .toggle-field:hover .field-label { color: var(--accent); }
 .field .switch, .field .btn-ghost { flex-shrink: 0; }
+.select-input {
+  flex-shrink: 0;
+  min-width: 132px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.select-input:focus { outline: none; border-color: var(--accent); }
 .res-inputs { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
 .res-inputs input {
   width: 74px;

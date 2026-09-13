@@ -12,19 +12,19 @@
         <span class="brand-mark"></span>
         <span class="brand-name">Touch in <b>STAKK</b></span>
       </div>
-      <button id="discord" class="title-link" title="Rejoindre le Discord STAKK" aria-label="Discord STAKK">
+      <button id="discord" class="title-link" data-i18n-title="title.discord" data-i18n-aria="title.discordAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
       </button>
       <!-- Frameless platforms only (Windows/Linux); hidden on macOS, which
            draws its own traffic lights. -->
       <div class="win-controls">
-        <button id="min" class="win-btn" title="Réduire" aria-label="Réduire">
+        <button id="min" class="win-btn" data-i18n-title="win.minimize" data-i18n-aria="win.minimize">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg>
         </button>
-        <button id="max" class="win-btn" title="Agrandir" aria-label="Agrandir">
+        <button id="max" class="win-btn" data-i18n-title="win.maximize" data-i18n-aria="win.maximize">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/></svg>
         </button>
-        <button id="close" class="win-btn win-close" title="Fermer" aria-label="Fermer">
+        <button id="close" class="win-btn win-close" data-i18n-title="win.close" data-i18n-aria="win.close">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
@@ -32,37 +32,37 @@
 
     <div id="patch-warn" hidden>
       <span class="warn-dot"></span>
-      <span>Patchs de compatibilité indisponibles — le jeu risque de ne pas démarrer.</span>
-      <button id="retry" class="btn-warn">Réessayer</button>
+      <span data-i18n="patch.warn"></span>
+      <button id="retry" class="btn-warn" data-i18n="patch.retry"></button>
     </div>
 
     <div id="update-banner" hidden>
-      <span id="update-text">Mise à jour disponible.</span>
-      <button id="update-install" class="btn-warn" hidden>Redémarrer &amp; installer</button>
+      <span id="update-text" data-i18n="update.idle"></span>
+      <button id="update-install" class="btn-warn" data-i18n="update.install" hidden></button>
     </div>
 
     <div id="workarea">
     <nav id="tabbar">
       <div id="tabs"></div>
-      <button id="add-tab" class="bar-btn" title="Ajouter un compte" aria-label="Ajouter un compte">
+      <button id="add-tab" class="bar-btn" data-i18n-title="bar.addAccount" data-i18n-aria="bar.addAccount">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button id="group-auto" class="bar-btn bar-btn-end" title="Grouper : invite tous les comptes dans ton groupe" aria-label="Grouper les comptes">
+      <button id="group-auto" class="bar-btn bar-btn-end" data-i18n-title="bar.group" data-i18n-aria="bar.groupAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
-      <button id="stats-btn" class="bar-btn" title="Gains de la session (XP et kamas)" aria-label="Gains de la session">
+      <button id="stats-btn" class="bar-btn" data-i18n-title="bar.stats" data-i18n-aria="bar.statsAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>
       </button>
-      <button id="mule-toggle" class="bar-btn" title="Suivre le chef : les autres comptes rejoignent le chef de groupe, même sur une autre map" aria-label="Suivre le chef">
+      <button id="mule-toggle" class="bar-btn" data-i18n-title="bar.mule" data-i18n-aria="bar.muleAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4M4 13h4"/></svg>
       </button>
-      <button id="harvest-toggle" class="bar-btn" title="Récolte auto : ramasse les ressources de la map (s'arrête si tu joues)" aria-label="Récolte auto">
+      <button id="harvest-toggle" class="bar-btn" data-i18n-title="bar.harvest" data-i18n-aria="bar.harvestAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
       </button>
-      <button id="broadcast-toggle" class="bar-btn" title="Diffusion : les touches de ce compte sont rejouées sur les autres" aria-label="Diffuser les touches">
+      <button id="broadcast-toggle" class="bar-btn" data-i18n-title="bar.broadcast" data-i18n-aria="bar.broadcastAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
       </button>
-      <button id="open-settings" class="bar-btn" title="Réglages" aria-label="Réglages">
+      <button id="open-settings" class="bar-btn" data-i18n-title="bar.settings" data-i18n-aria="bar.settings">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
     </nav>
@@ -72,15 +72,15 @@
 
     <div id="empty" hidden>
       <div class="empty-mark"></div>
-      <h2>Aucun compte</h2>
-      <p>Ajoute un compte Dofus Touch pour commencer à jouer.</p>
-      <button id="add-first" class="btn-primary">Ajouter un compte</button>
+      <h2 data-i18n="empty.title"></h2>
+      <p data-i18n="empty.desc"></p>
+      <button id="add-first" class="btn-primary" data-i18n="empty.add"></button>
     </div>
 
     <aside id="stats-panel" hidden>
       <header class="panel-head">
-        <span>Gains de la session</span>
-        <button id="stats-close" class="panel-close" aria-label="Fermer">✕</button>
+        <span data-i18n="stats.title"></span>
+        <button id="stats-close" class="panel-close" data-i18n-aria="common.close">✕</button>
       </header>
       <div id="stats-list"></div>
     </aside>
@@ -88,146 +88,158 @@
     <div id="settings-modal" hidden>
       <div class="modal-card">
         <div class="modal-head">
-          <h2>Réglages</h2>
-          <span class="modal-sub">Les changements s'appliquent à tous les comptes</span>
+          <h2 data-i18n="settings.title"></h2>
+          <span class="modal-sub" data-i18n="settings.sub"></span>
         </div>
         <div class="modal-body">
 
           <section class="settings-section">
-            <h3>Fenêtre</h3>
+            <h3 data-i18n="settings.window"></h3>
             <div class="field">
               <div class="field-text">
-                <span class="field-label">Taille de la fenêtre</span>
-                <span class="field-desc">La fenêtre s'ouvre à la taille de l'écran par défaut ; le jeu s'adapte à la zone disponible</span>
+                <span class="field-label" data-i18n="field.lang.label"></span>
+                <span class="field-desc" data-i18n="field.lang.desc"></span>
+              </div>
+              <select id="lang" class="select-input" data-i18n-aria="field.lang.label">
+                <option value="auto" data-i18n="lang.auto"></option>
+                <option value="fr" data-i18n="lang.fr"></option>
+                <option value="en" data-i18n="lang.en"></option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="field-text">
+                <span class="field-label" data-i18n="field.size.label"></span>
+                <span class="field-desc" data-i18n="field.size.desc"></span>
               </div>
               <div class="res-inputs">
-                <input id="res-w" type="number" min="960" step="8" aria-label="Largeur" />
+                <input id="res-w" type="number" min="960" step="8" data-i18n-aria="aria.width" />
                 <span class="res-x">×</span>
-                <input id="res-h" type="number" min="600" step="8" aria-label="Hauteur" />
+                <input id="res-h" type="number" min="600" step="8" data-i18n-aria="aria.height" />
               </div>
             </div>
             <div class="res-slider-row">
-              <input id="res-slider" type="range" min="960" step="8" aria-label="Taille de la fenêtre" />
+              <input id="res-slider" type="range" min="960" step="8" data-i18n-aria="aria.windowSize" />
               <span id="res-hint" class="field-hint"></span>
             </div>
             <div id="res-presets" class="res-presets"></div>
             <label class="field toggle-field" for="tabbar-side">
               <div class="field-text">
-                <span class="field-label">Onglets sur le côté</span>
-                <span class="field-desc">Barre verticale à gauche au lieu d'en haut</span>
+                <span class="field-label" data-i18n="field.tabside.label"></span>
+                <span class="field-desc" data-i18n="field.tabside.desc"></span>
               </div>
               <input id="tabbar-side" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="muted">
               <div class="field-text">
-                <span class="field-label">Couper le son</span>
-                <span class="field-desc">Tous les comptes, y compris l'onglet actif</span>
+                <span class="field-label" data-i18n="field.muted.label"></span>
+                <span class="field-desc" data-i18n="field.muted.desc"></span>
               </div>
               <input id="muted" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="mute-inactive">
               <div class="field-text">
-                <span class="field-label">Son uniquement sur l'onglet actif</span>
-                <span class="field-desc">Les comptes en arrière-plan sont muets, celui affiché garde le son</span>
+                <span class="field-label" data-i18n="field.muteInactive.label"></span>
+                <span class="field-desc" data-i18n="field.muteInactive.desc"></span>
               </div>
               <input id="mute-inactive" type="checkbox" class="switch" />
             </label>
           </section>
 
           <section class="settings-section">
-            <h3>Multi-compte</h3>
+            <h3 data-i18n="settings.multi"></h3>
             <label class="field toggle-field" for="switch-on-turn">
               <div class="field-text">
-                <span class="field-label">Basculer sur le compte dont c'est le tour</span>
-                <span class="field-desc">En combat, l'onglet change tout seul quand un compte doit jouer</span>
+                <span class="field-label" data-i18n="field.switchTurn.label"></span>
+                <span class="field-desc" data-i18n="field.switchTurn.desc"></span>
               </div>
               <input id="switch-on-turn" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="join-leader-fight">
               <div class="field-text">
-                <span class="field-label">Rejoindre les combats du chef</span>
-                <span class="field-desc">Quand le chef de groupe lance un combat, les autres comptes entrent dedans et se mettent prêts en même temps que lui</span>
+                <span class="field-label" data-i18n="field.joinFight.label"></span>
+                <span class="field-desc" data-i18n="field.joinFight.desc"></span>
               </div>
               <input id="join-leader-fight" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="auto-accept-group">
               <div class="field-text">
-                <span class="field-label">Accepter les invitations de groupe</span>
-                <span class="field-desc">Uniquement celles envoyées par un autre compte de ce launcher</span>
+                <span class="field-label" data-i18n="field.acceptGroup.label"></span>
+                <span class="field-desc" data-i18n="field.acceptGroup.desc"></span>
               </div>
               <input id="auto-accept-group" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="auto-accept-own">
               <div class="field-text">
-                <span class="field-label">Accepter échanges et défis entre tes comptes</span>
-                <span class="field-desc">Uniquement quand la demande vient d'un de tes autres onglets</span>
+                <span class="field-label" data-i18n="field.acceptOwn.label"></span>
+                <span class="field-desc" data-i18n="field.acceptOwn.desc"></span>
               </div>
               <input id="auto-accept-own" type="checkbox" class="switch" />
             </label>
           </section>
 
           <section class="settings-section">
-            <h3>Confort de jeu</h3>
+            <h3 data-i18n="settings.comfort"></h3>
             <label class="field toggle-field" for="no-confirm">
               <div class="field-text">
-                <span class="field-label">Sans confirmation</span>
-                <span class="field-desc">Un seul clic pour se déplacer ou lancer un sort</span>
+                <span class="field-label" data-i18n="field.noConfirm.label"></span>
+                <span class="field-desc" data-i18n="field.noConfirm.desc"></span>
               </div>
               <input id="no-confirm" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="show-resources">
               <div class="field-text">
-                <span class="field-label">Étiquettes des ressources</span>
-                <span class="field-desc">Nom des ressources récoltables affiché sur la map</span>
+                <span class="field-label" data-i18n="field.resources.label"></span>
+                <span class="field-desc" data-i18n="field.resources.desc"></span>
               </div>
               <input id="show-resources" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="hide-shop">
               <div class="field-text">
-                <span class="field-label">Masquer le bouton boutique</span>
+                <span class="field-label" data-i18n="field.hideShop.label"></span>
               </div>
               <input id="hide-shop" type="checkbox" class="switch" />
             </label>
             <label class="field toggle-field" for="notifications">
               <div class="field-text">
-                <span class="field-label">Notifications sonores</span>
-                <span class="field-desc">Tour de combat, message privé, déconnexion, sur un onglet inactif</span>
+                <span class="field-label" data-i18n="field.notifications.label"></span>
+                <span class="field-desc" data-i18n="field.notifications.desc"></span>
               </div>
               <input id="notifications" type="checkbox" class="switch" />
             </label>
           </section>
 
           <section class="settings-section">
-            <h3>Raccourcis clavier <span class="field-hint">— compte actif</span></h3>
+            <h3><span data-i18n="settings.keys"></span> <span class="field-hint" data-i18n="settings.keysSub"></span></h3>
             <div id="keybinds" class="keybinds"></div>
-            <h3 class="h3-sub">Raccourcis du launcher</h3>
+            <h3 class="h3-sub" data-i18n="settings.launcherKeys"></h3>
             <div class="shortcuts">
-              <div class="sc-row"><span>Passer d'un compte à l'autre</span><kbd>Ctrl</kbd><kbd>1</kbd>…<kbd>9</kbd></div>
-              <div class="sc-row"><span>Compte suivant / précédent</span><kbd>Ctrl</kbd><kbd>Tab</kbd></div>
-              <div class="sc-row"><span>Tous les comptes « prêt »</span><kbd>F2</kbd></div>
-              <div class="sc-row"><span>Plein écran</span><kbd>F11</kbd></div>
+              <div class="sc-row"><span data-i18n="sc.switch"></span><kbd>Ctrl</kbd><kbd>1</kbd>…<kbd>9</kbd></div>
+              <div class="sc-row"><span data-i18n="sc.cycle"></span><kbd>Ctrl</kbd><kbd>Tab</kbd></div>
+              <div class="sc-row"><span data-i18n="sc.ready"></span><kbd>F2</kbd></div>
+              <div class="sc-row"><span data-i18n="sc.fullscreen"></span><kbd>F11</kbd></div>
             </div>
           </section>
 
           <section class="settings-section">
-            <h3>Avancé</h3>
+            <h3 data-i18n="settings.advanced"></h3>
             <div class="field">
               <div class="field-text">
-                <span class="field-label">Console du jeu</span>
-                <span class="field-desc">DevTools de l'onglet actif, pour le diagnostic</span>
+                <span class="field-label" data-i18n="field.devtools.label"></span>
+                <span class="field-desc" data-i18n="field.devtools.desc"></span>
               </div>
-              <button id="open-devtools" type="button" class="btn-ghost">Ouvrir</button>
+              <button id="open-devtools" type="button" class="btn-ghost" data-i18n="field.devtools.open"></button>
             </div>
           </section>
 
         </div>
         <div class="modal-actions">
-          <button id="close-settings" class="btn-ghost">Annuler</button>
-          <button id="save-settings" class="btn-primary">Enregistrer</button>
+          <button id="close-settings" class="btn-ghost" data-i18n="settings.cancel"></button>
+          <button id="save-settings" class="btn-primary" data-i18n="settings.save"></button>
         </div>
       </div>
     </div>
 
+    <script src="../i18n/strings.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

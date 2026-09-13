@@ -22,6 +22,7 @@ const { prepareSession, seedOf } = require('./session-prep');
 const { deviceProfile } = require('./spoof');
 const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
 const { initAutoUpdate } = require('./updater');
+const { resolveLang } = require('../i18n/strings');
 
 let updater = null;
 
@@ -211,6 +212,12 @@ async function boot() {
 }
 
 ipcMain.handle('settings:get', () => loadSettings(userDataDir()));
+// The renderer asks once, at startup: which language to draw, and which one
+// "Automatic" resolves to for this machine.
+ipcMain.handle('i18n:lang', () => ({
+  lang: resolveLang(loadSettings(userDataDir()).lang, app.getLocale()),
+  auto: resolveLang(null, app.getLocale()),
+}));
 // Live preview from the settings dialog: resize without saving. Cancel sends
 // the saved size back through the same channel.
 ipcMain.on('window:preview-size', (_e, w, h) => {

@@ -100,7 +100,16 @@ function keepAlive() {
 
 // Runs in the page's MAIN world. No node/ipc access here — it talks to the
 // preload only through window.postMessage, so the game keeps no privileged refs.
-function gameHook() {
+function gameHook(strings) {
+  // Messages this hook draws inside the game, in the launcher's language.
+  var S = strings || {};
+  function t(key, params) {
+    var out = S[key] != null ? S[key] : key;
+    if (params) Object.keys(params).forEach(function (name) {
+      out = out.split('{' + name + '}').join(String(params[name]));
+    });
+    return out;
+  }
   var expectInviteFrom = null;
   var expectTimer = null;
   var ownIds = {};          // character ids of the user's other accounts
@@ -744,7 +753,7 @@ function gameHook() {
         if (cell && (cell.l & 1)) asSelf(function () { iso._movePlayerOnMap(target.cellId, false); });
       } catch (e) {}
     }
-    if (!arrived) toast('Voyage interrompu', 'warn');
+    if (!arrived) toast(t('travelStopped'), 'warn');
     emit({ type: 'travel-done', ok: arrived, reason: arrived ? 'arrived' : 'max-hops',
            x: at ? at.x : null, y: at ? at.y : null });
   }
@@ -808,7 +817,7 @@ function gameHook() {
       'box-shadow:0 2px 8px rgba(0,0,0,.6)', 'user-select:none',
     ].join(';');
     var item = document.createElement('div');
-    item.textContent = 'Courir ici ' + label;
+    item.textContent = t('runHere') + ' ' + label;
     item.style.cssText = 'padding:5px 14px;white-space:nowrap';
     item.onmouseenter = function () { item.style.background = '#40311f'; };
     item.onmouseleave = function () { item.style.background = ''; };
@@ -882,7 +891,7 @@ function gameHook() {
       // These nodes are recycled: an entry added on a previous open is still
       // here, showing stale coordinates. Refresh its label rather than bailing
       // out because one already exists.
-      var want = 'Courir ici (' + c.x + ',' + c.y + ')';
+      var want = t('runHere') + ' (' + c.x + ',' + c.y + ')';
       var existing = list.querySelector('.stakk-travel-entry');
       if (existing) {
         if (existing.textContent !== want) existing.textContent = want;
@@ -1295,7 +1304,7 @@ function gameHook() {
         // A fight interrupts everything: wait it out rather than spinning.
         if (inFight()) {
           harvest.paused = true;
-          toast('Combat — récolte en pause', 'warn');
+          toast(t('fightPause'), 'warn');
           emit({ type: 'harvest-state', state: 'fight' });
           while (harvest.on && inFight()) await tSleep(2000);
           harvest.paused = false;
@@ -1341,7 +1350,7 @@ function gameHook() {
       harvest.lastError = String(e);
     }
     harvest.busy = false;
-    toast('Récolte terminée — ' + harvest.gathered + ' ressource(s)', 'info');
+    toast(t('harvestDone', { n: harvest.gathered }), 'info');
     emit({ type: 'harvest-state', state: 'stopped', gathered: harvest.gathered });
   }
 
@@ -1353,7 +1362,7 @@ function gameHook() {
       if (inFight() || p.fightId == null) return;
       var iso = window.isoEngine;
       if (iso.mapRenderer.mapId !== p.mapId) {
-        toast('Rejoint le combat du chef…', 'info');
+        toast(t('joiningLeaderFight'), 'info');
         var dir = neighbourDir(p.mapId);
         if (dir) {
           // Adjacent map: one border hop, no world-map data needed.
@@ -1375,13 +1384,12 @@ function gameHook() {
   // Stop everything the launcher is driving. Called when the player acts.
   function abortAutomation(what) {
     var stopped = [];
-    if (harvest.on) { harvest.on = false; stopped.push('récolte'); }
-    if (!travelAbort) { travelAbort = true; stopped.push('trajet'); }
+    if (harvest.on) { harvest.on = false; stopped.push('harvest'); }
+    if (!travelAbort) { travelAbort = true; stopped.push('travel'); }
     if (stopped.length) {
       harvest.stage = 'interrupted:' + what;
       harvest.since = Date.now();
-      toast(stopped.join(' + ') + ' interrompu' + (stopped.length > 1 ? 's' : '') +
-            ' (action manuelle)', 'warn');
+      toast(t('interrupted', { what: stopped.map(function (id) { return t(id); }).join(' + ') }), 'warn');
       emit({ type: 'automation-interrupted', by: what, stopped: stopped });
     }
   }
@@ -1397,8 +1405,8 @@ function gameHook() {
     _elemPos = {};
     installManualWatch();
     onManualAction = abortAutomation;
-    toast('Récolte auto activée' + (harvest.circuit.length
-      ? ' — circuit de ' + harvest.circuit.length + ' points' : ''), 'good');
+    toast(t('harvestOn') + (harvest.circuit.length
+      ? t('harvestCircuit', { n: harvest.circuit.length }) : ''), 'good');
     emit({ type: 'harvest-state', state: 'started', points: harvest.circuit.length });
     harvestLoop();
   }
@@ -1753,7 +1761,11 @@ function gameHook() {
     if (!e.data || e.data.__qol !== 'cmd') return;
     var p = e.data.payload;
     if (!p) return;
-    if (p.type === 'invite' && p.names) {
+    if (p.type === 'strings') {
+      // The user switched language in the launcher: later messages use it, no
+      // reload needed.
+      S = p.strings || {};
+    } else if (p.type === 'invite' && p.names) {
       p.names.forEach(function (name) {
         send('PartyInvitationRequestMessage', { name: name });
       });
@@ -1898,7 +1910,7 @@ function gameHook() {
         if (!found) return;
         setTimeout(function () {
           send('GameFightJoinRequestMessage', { fighterId: leader, fightId: info.fightId });
-          toast('Rejoint le combat du chef', 'info');
+          toast(t('joinedLeaderFight'), 'info');
         }, jitter(700, 0.5));
       } catch (e) {}
     });
@@ -1934,7 +1946,7 @@ function gameHook() {
             setTimeout(function () {
               if (inFight()) return;
               send('GameFightJoinRequestMessage', { fighterId: leader, fightId: fid });
-              toast('Rejoint le combat du chef', 'info');
+              toast(t('joinedLeaderFight'), 'info');
               emit({ type: 'party-debug', what: 'join-fight envoyé', data: { fightId: fid, leader: leader } });
             }, jitter(250, 0.6));
           })(f.fightId);
@@ -2084,9 +2096,10 @@ function gameHook() {
   }, 500);
 }
 
+let gameLang = {};
 function injectHook() {
   const script = document.createElement('script');
-  script.textContent = '(' + gameHook.toString() + ')();';
+  script.textContent = '(' + gameHook.toString() + ')(' + JSON.stringify(gameLang) + ');';
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 }
@@ -2141,6 +2154,9 @@ window.addEventListener('message', (e) => {
 
 // renderer host -> main-world hook
 ipcRenderer.on('qol', (_e, payload) => {
+  // Remember the strings: the hook may not be injected yet when the language
+  // arrives, and a later reinjection has to carry them.
+  if (payload && payload.type === 'strings') gameLang = payload.strings || {};
   window.postMessage({ __qol: 'cmd', payload }, '*');
 });
 

@@ -1,5 +1,30 @@
 const $ = (id) => document.getElementById(id);
 
+// --- Language ----------------------------------------------------------------
+// Dictionaries come from ../i18n/strings.js, loaded by a <script> tag before
+// this file (the renderer has no bundler and no node integration, so it reads
+// the copy the file registers on globalThis).
+const I18N = globalThis.STAKK_I18N;
+let lang = 'fr';
+// What the Automatic setting resolves to on this machine, from the OS locale.
+let autoLang = 'en';
+const t = (key, params) => I18N.translate(lang, key, params);
+
+// Fill every data-i18n hook in the markup. Called once at startup and again
+// whenever the user switches language, so nothing needs a restart.
+function applyI18n(root = document) {
+  for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of root.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
+  for (const el of root.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  document.documentElement.lang = lang;
+  // The toolbar tooltips are drawn in CSS from data-tip (the native ones do not
+  // show in a frameless window), so they are re-mirrored after each pass.
+  for (const b of document.querySelectorAll('.bar-btn[title]')) {
+    b.dataset.tip = b.getAttribute('title');
+    b.removeAttribute('title');
+  }
+}
+
 let gameUrl = null;
 let gamePreloadUrl = null;
 let settings = null;
@@ -13,41 +38,41 @@ const sessionStats = {}; // accountId -> { xp, kamas } gained since launch
 // keyboard shortcuts, so each opens the game's own window). The user assigns a
 // trigger key to each; it applies to the active account.
 const KEYBIND_ACTIONS = [
-  { id: 'inventory', label: 'Inventaire', defaultKey: 'i' },
-  { id: 'character', label: 'Caractéristiques', defaultKey: 'c' },
-  { id: 'spells', label: 'Sorts', defaultKey: 's' },
-  { id: 'quests', label: 'Quêtes', defaultKey: 'q' },
-  { id: 'jobs', label: 'Métiers', defaultKey: 'j' },
-  { id: 'bestiary', label: 'Bestiaire', defaultKey: 'b' },
-  { id: 'achievements', label: 'Succès', defaultKey: 'y' },
-  { id: 'map', label: 'Carte', defaultKey: 'm' },
-  { id: 'social', label: 'Amis', defaultKey: 'f' },
-  { id: 'guild', label: 'Guilde', defaultKey: 'g' },
-  { id: 'alliance', label: 'Alliance', defaultKey: 'a' },
-  { id: 'market', label: 'Hôtel de vente', defaultKey: 'h' },
-  { id: 'koliseum', label: 'Koliseum', defaultKey: 'k' },
-  { id: 'dailyQuest', label: 'Quêtes du jour', defaultKey: 'd' },
-  { id: 'groupSeeker', label: 'Recherche de groupe', defaultKey: 'r' },
-  { id: 'toa', label: 'Temple (TOA)', defaultKey: 't' },
-  { id: 'titles', label: 'Titres / Ornements', defaultKey: 'n' },
-  { id: 'zaap', label: 'Zaap / Téléportation', defaultKey: 'w' },
-  { id: 'goultines', label: 'Boutique (goultines)', defaultKey: 'x' },
-  { id: 'options', label: 'Options', defaultKey: 'o' },
-  { id: 'mount', label: 'Monture', defaultKey: 'p' },
-  { id: 'directory', label: 'Annuaire', defaultKey: 'e' },
-  { id: 'conquest', label: 'Conquête (AvA)', defaultKey: 'l' },
-  { id: 'alignment', label: 'Alignement', defaultKey: 'u' },
-  { id: 'spouse', label: 'Conjoint', defaultKey: 'v' },
-  { id: 'entities', label: 'Afficher les entités', defaultKey: 'z' },
-  { id: 'close', label: 'Fermer les interfaces', defaultKey: 'Escape' },
-  { id: 'spell1', label: 'Sort 1', defaultKey: '1' },
-  { id: 'spell2', label: 'Sort 2', defaultKey: '2' },
-  { id: 'spell3', label: 'Sort 3', defaultKey: '3' },
-  { id: 'spell4', label: 'Sort 4', defaultKey: '4' },
-  { id: 'spell5', label: 'Sort 5', defaultKey: '5' },
-  { id: 'spell6', label: 'Sort 6', defaultKey: '6' },
-  { id: 'spell7', label: 'Sort 7', defaultKey: '7' },
-  { id: 'spell8', label: 'Sort 8', defaultKey: '8' },
+  { id: 'inventory', key: 'action.inventory', defaultKey: 'i' },
+  { id: 'character', key: 'action.character', defaultKey: 'c' },
+  { id: 'spells', key: 'action.spells', defaultKey: 's' },
+  { id: 'quests', key: 'action.quests', defaultKey: 'q' },
+  { id: 'jobs', key: 'action.jobs', defaultKey: 'j' },
+  { id: 'bestiary', key: 'action.bestiary', defaultKey: 'b' },
+  { id: 'achievements', key: 'action.achievements', defaultKey: 'y' },
+  { id: 'map', key: 'action.map', defaultKey: 'm' },
+  { id: 'social', key: 'action.social', defaultKey: 'f' },
+  { id: 'guild', key: 'action.guild', defaultKey: 'g' },
+  { id: 'alliance', key: 'action.alliance', defaultKey: 'a' },
+  { id: 'market', key: 'action.market', defaultKey: 'h' },
+  { id: 'koliseum', key: 'action.koliseum', defaultKey: 'k' },
+  { id: 'dailyQuest', key: 'action.dailyQuest', defaultKey: 'd' },
+  { id: 'groupSeeker', key: 'action.groupSeeker', defaultKey: 'r' },
+  { id: 'toa', key: 'action.toa', defaultKey: 't' },
+  { id: 'titles', key: 'action.titles', defaultKey: 'n' },
+  { id: 'zaap', key: 'action.zaap', defaultKey: 'w' },
+  { id: 'goultines', key: 'action.goultines', defaultKey: 'x' },
+  { id: 'options', key: 'action.options', defaultKey: 'o' },
+  { id: 'mount', key: 'action.mount', defaultKey: 'p' },
+  { id: 'directory', key: 'action.directory', defaultKey: 'e' },
+  { id: 'conquest', key: 'action.conquest', defaultKey: 'l' },
+  { id: 'alignment', key: 'action.alignment', defaultKey: 'u' },
+  { id: 'spouse', key: 'action.spouse', defaultKey: 'v' },
+  { id: 'entities', key: 'action.entities', defaultKey: 'z' },
+  { id: 'close', key: 'action.close', defaultKey: 'Escape' },
+  { id: 'spell1', key: 'action.spell', keyParams: { n: 1 }, defaultKey: '1' },
+  { id: 'spell2', key: 'action.spell', keyParams: { n: 2 }, defaultKey: '2' },
+  { id: 'spell3', key: 'action.spell', keyParams: { n: 3 }, defaultKey: '3' },
+  { id: 'spell4', key: 'action.spell', keyParams: { n: 4 }, defaultKey: '4' },
+  { id: 'spell5', key: 'action.spell', keyParams: { n: 5 }, defaultKey: '5' },
+  { id: 'spell6', key: 'action.spell', keyParams: { n: 6 }, defaultKey: '6' },
+  { id: 'spell7', key: 'action.spell', keyParams: { n: 7 }, defaultKey: '7' },
+  { id: 'spell8', key: 'action.spell', keyParams: { n: 8 }, defaultKey: '8' },
 ];
 
 // Drives the platform rules in style.css: macOS runs a native window, so its
@@ -67,10 +92,10 @@ $('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
 // view never letterboxes. Clicking one fills the width/height inputs; the user
 // still confirms with Enregistrer.
 const RESOLUTION_PRESETS = [
-  { label: 'Compact', width: 1152, height: 640 },
-  { label: 'Défaut', width: 1440, height: 800 },
-  { label: 'Large', width: 1600, height: 889 },
-  { label: 'XL', width: 1920, height: 1067 },
+  { key: 'preset.compact', width: 1152, height: 640 },
+  { key: 'preset.default', width: 1440, height: 800 },
+  { key: 'preset.large', width: 1600, height: 889 },
+  { key: 'preset.xl', width: 1920, height: 1067 },
 ];
 const GAME_RATIO = 1440 / 800;
 // Width and height are independent: the window is free-form and the game
@@ -89,7 +114,7 @@ function setResolution(w, h, source) {
   if (source !== 'height') $('res-h').value = h;
   $('res-slider').value = w;
   const fit = Math.round((w / screen.availWidth) * 100);
-  $('res-hint').textContent = fit >= 100 ? 'Pleine largeur' : fit + ' % de l\'écran';
+  $('res-hint').textContent = fit >= 100 ? t('res.full') : t('res.percent', { pct: fit });
   markActivePreset();
   previewResolution(w, h);
 }
@@ -107,14 +132,14 @@ function renderPresets() {
   // 'Écran' is the display's usable area exactly — no ratio fit, since the
   // window no longer has to match the game's aspect.
   const presets = [...RESOLUTION_PRESETS.filter((p) => p.width <= screen.availWidth),
-                   { label: 'Écran', width: screen.availWidth, height: screen.availHeight }];
+                   { key: 'preset.screen', width: screen.availWidth, height: screen.availHeight }];
   for (const p of presets) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'preset-btn';
     b.dataset.w = p.width;
     b.dataset.h = p.height;
-    b.textContent = p.label + ' · ' + p.width + '×' + p.height;
+    b.textContent = t(p.key) + ' · ' + p.width + '×' + p.height;
     b.onclick = () => setResolution(p.width, p.height, 'preset');
     box.appendChild(b);
   }
@@ -173,12 +198,6 @@ $('group-auto').onclick = groupAuto;
 $('broadcast-toggle').onclick = toggleBroadcast;
 $('harvest-toggle').onclick = toggleHarvest;
 
-// Mirror each toolbar button's title into data-tip: the CSS tooltip renders it,
-// since the native one does not appear in a frameless window on macOS.
-for (const b of document.querySelectorAll('.bar-btn[title]')) {
-  b.dataset.tip = b.getAttribute('title');
-  b.removeAttribute('title');
-}
 $('mule-toggle').onclick = toggleMuleFollow;
 $('stats-btn').onclick = toggleStats;
 $('stats-close').onclick = () => ($('stats-panel').hidden = true);
@@ -244,6 +263,8 @@ $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => {
   clearTimeout(previewTimer);
   if (sizeBeforePreview) window.touch.previewSize(sizeBeforePreview.width, sizeBeforePreview.height);
+  // The language preview is live too, so cancelling puts the saved one back.
+  setLang(settings.lang || autoLang);
   $('settings-modal').hidden = true;
 };
 $('save-settings').onclick = saveSettings;
@@ -260,9 +281,9 @@ window.touch.onUpdaterStatus((s) => {
   const banner = $('update-banner');
   const text = $('update-text');
   const install = $('update-install');
-  if (s.status === 'available') { text.textContent = `Mise à jour ${s.version} disponible — téléchargement…`; install.hidden = true; banner.hidden = false; }
-  else if (s.status === 'downloading') { text.textContent = `Téléchargement de la mise à jour… ${s.percent || 0}%`; install.hidden = true; banner.hidden = false; }
-  else if (s.status === 'ready') { text.textContent = `Mise à jour ${s.version} prête.`; install.hidden = false; banner.hidden = false; }
+  if (s.status === 'available') { text.textContent = t('update.available', { version: s.version }); install.hidden = true; banner.hidden = false; }
+  else if (s.status === 'downloading') { text.textContent = t('update.downloading', { percent: s.percent || 0 }); install.hidden = true; banner.hidden = false; }
+  else if (s.status === 'ready') { text.textContent = t('update.ready', { version: s.version }); install.hidden = false; banner.hidden = false; }
   else if (s.status === 'error') { banner.hidden = true; }
 });
 
@@ -276,6 +297,11 @@ const accountColor = (id) => TAB_COLORS[(id - 1) % TAB_COLORS.length];
 async function init() {
   await refreshPatchStatus();
   settings = await window.touch.getSettings();
+  // Main owns the resolution (saved choice, else the OS locale); the first
+  // paint below is already in the right language.
+  const langInfo = await window.touch.getLang();
+  autoLang = langInfo.auto;
+  setLang(langInfo.lang);
   applyTabBarSide(settings.tabBarSide);
   gameUrl = await window.touch.getGameUrl();
   gamePreloadUrl = await window.touch.getGamePreloadUrl();
@@ -289,6 +315,20 @@ async function init() {
 
 function showEmpty(v) {
   $('empty').hidden = !v;
+}
+
+// Switch language in place: refill the markup, redraw the lists that build
+// their own text, and hand the game hooks their own strings.
+function setLang(next) {
+  lang = I18N.LANGS.includes(next) ? next : 'fr';
+  applyI18n();
+  if (!$('settings-modal').hidden) {
+    renderPresets();
+    markActivePreset();
+    renderKeybinds();
+  }
+  if (!$('stats-panel').hidden) renderStats();
+  broadcastToAll({ type: 'strings', strings: I18N.gameStrings(lang) });
 }
 
 async function createView(account) {
@@ -312,6 +352,7 @@ async function createView(account) {
     wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
     wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
     wv.send('qol', { type: 'hide-shop', on: !!settings.hideShop });
+    wv.send('qol', { type: 'strings', strings: I18N.gameStrings(lang) });
   });
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'qol') handleQol(account.id, e.args[0]);
@@ -444,11 +485,11 @@ function handleQol(accountId, msg) {
     maybeAttention();
     pulseTab(accountId);
   } else if (msg.type === 'whisper') {
-    notify(accountId, 'Message privé de ' + (msg.from || '?'));
+    notify(accountId, t('notify.whisper', { from: msg.from || '?' }));
   } else if (msg.type === 'party-invite') {
-    notify(accountId, 'Invitation de groupe de ' + (msg.from || '?'));
+    notify(accountId, t('notify.partyInvite', { from: msg.from || '?' }));
   } else if (msg.type === 'challenge-invite') {
-    notify(accountId, 'Défi en combat de ' + (msg.from || '?'));
+    notify(accountId, t('notify.challenge', { from: msg.from || '?' }));
   } else if (msg.type === 'portrait') {
     if (msg.dataUrl) {
       portraits[accountId] = msg.dataUrl;
@@ -458,7 +499,7 @@ function handleQol(accountId, msg) {
     console.log('[travel] right-click hook installed on world map');
   } else if (msg.type === 'travel-started') {
     console.log('[travel] going to ' + msg.x + ',' + msg.y);
-    notify(accountId, 'Voyage vers ' + msg.x + ',' + msg.y);
+    notify(accountId, t('notify.travelStart', { x: msg.x, y: msg.y }));
   } else if (msg.type === 'travel-replan') {
     console.log('[travel] replan from ' + msg.x + ',' + msg.y + ' (' + msg.steps + ' steps)');
   } else if (msg.type === 'travel-plan') {
@@ -467,17 +508,19 @@ function handleQol(accountId, msg) {
     // Each hop, so a stalled trip shows where it stopped.
     console.log('[travel] ' + msg.x + ',' + msg.y + ' (hop ' + msg.hop + ')');
   } else if (msg.type === 'travel-done') {
-    var where = msg.x != null ? ' à ' + msg.x + ',' + msg.y : '';
+    var where = msg.x != null ? t('notify.travelAt', { x: msg.x, y: msg.y }) : '';
     console.log('[travel] done ok=' + msg.ok + ' reason=' + msg.reason + where);
-    notify(accountId, msg.ok ? 'Arrivé à destination' : 'Voyage interrompu (' + (msg.reason || '?') + ')' + where);
+    notify(accountId, msg.ok ? t('notify.arrived') : t('notify.travelStopped', { reason: msg.reason || '?', where }));
   } else if (msg.type === 'harvest-progress') {
     console.log('[harvest] ' + msg.gathered + ' récolté(s) — ' + (msg.name || ''));
   } else if (msg.type === 'automation-interrupted') {
     harvesting.delete(accountId);
     renderHarvestButton();
-    const what = (msg.stopped || []).join(' + ');
+    // The hook reports what it stopped as ids ('harvest', 'travel'), so each
+    // side names them in its own language.
+    const what = (msg.stopped || []).map((id) => t('game.' + id)).join(' + ');
     console.log('[stakk] action manuelle -> ' + what + ' interrompu(e)');
-    notify(accountId, what + ' interrompu (action manuelle)');
+    notify(accountId, t('notify.interrupted', { what }));
   } else if (msg.type === 'harvest-skip') {
     console.log('[harvest] passé: ' + (msg.name || msg.id));
   } else if (msg.type === 'harvest-state') {
@@ -488,7 +531,7 @@ function handleQol(accountId, msg) {
       console.log('[harvest] arrêté — ' + msg.gathered + ' récolté(s)');
       harvesting.delete(accountId);
       renderHarvestButton();
-      notify(accountId, 'Récolte arrêtée (' + msg.gathered + ')');
+      notify(accountId, t('notify.harvestStopped', { n: msg.gathered }));
     }
     if (msg.state === 'started') { harvesting.add(accountId); renderHarvestButton(); }
   } else if (msg.type === 'harvest-status') {
@@ -508,13 +551,13 @@ function handleQol(accountId, msg) {
   } else if (msg.type === 'entities-debug') {
     window.touch.logDebug('[entities-debug]', msg);
   } else if (msg.type === 'disconnected') {
-    notify(accountId, 'Déconnecté du jeu');
+    notify(accountId, t('notify.disconnected'));
   }
 }
 
 function accountName(id) {
   const a = accounts.find((x) => x.id === id);
-  return a ? a.name : 'Compte';
+  return a ? a.name : t('account.fallback');
 }
 
 // Badge the tab, play a short tone, and raise a desktop notification (unless the
@@ -597,13 +640,14 @@ function toggleStats() {
   if (!panel.hidden) renderStats();
 }
 
-const fmt = (n) => (n || 0).toLocaleString('fr-FR');
+const fmt = (n) => (n || 0).toLocaleString(I18N.LOCALES[lang]);
 
 function renderStats() {
   const box = $('stats-list');
   box.innerHTML = '';
   if (!accounts.length) {
-    box.innerHTML = '<div class="panel-empty">Aucun compte.</div>';
+    box.innerHTML = '<div class="panel-empty"></div>';
+    box.firstChild.textContent = t('stats.empty');
     return;
   }
   for (const a of accounts) {
@@ -617,10 +661,10 @@ function renderStats() {
     vals.className = 'st-vals';
     const xp = document.createElement('span');
     xp.className = 'st-xp';
-    xp.textContent = '+' + fmt(s.xp) + ' XP';
+    xp.textContent = '+' + fmt(s.xp) + ' ' + t('stats.xp');
     const km = document.createElement('span');
     km.className = 'st-kamas';
-    km.textContent = (s.kamas >= 0 ? '+' : '') + fmt(s.kamas) + ' K';
+    km.textContent = (s.kamas >= 0 ? '+' : '') + fmt(s.kamas) + ' ' + t('stats.kamas');
     vals.append(xp, km);
     row.append(name, vals);
     box.appendChild(row);
@@ -640,11 +684,11 @@ function groupAuto() {
   const leaderIdentity = identities[leader.id];
   // Say why nothing happens instead of silently doing nothing: identities only
   // arrive once each account is in game.
-  if (!leaderIdentity) { notify(activeId, 'Grouper : ce compte n\'est pas encore en jeu'); return; }
+  if (!leaderIdentity) { notify(activeId, t('group.notInGame')); return; }
   const others = accounts.filter((a) => a.id !== leader.id && identities[a.id]);
   const notReady = accounts.filter((a) => a.id !== leader.id && !identities[a.id]).length;
   console.log('[group] chef=' + leaderIdentity.name + ' invités=' + others.map((a) => identities[a.id].name).join(',') + ' pas en jeu=' + notReady);
-  if (!others.length) { notify(activeId, 'Grouper : aucun autre compte en jeu'); return; }
+  if (!others.length) { notify(activeId, t('group.noOthers')); return; }
   for (const a of others) sendToView(a.id, { type: 'expect-invite', from: leaderIdentity.name });
   sendToView(leader.id, { type: 'invite', names: others.map((a) => identities[a.id].name) });
 }
@@ -714,7 +758,7 @@ function renderKeybinds() {
     row.className = 'kb-row';
     const label = document.createElement('span');
     label.className = 'kb-label';
-    label.textContent = a.label;
+    label.textContent = actionLabel(a);
     const key = document.createElement('button');
     key.type = 'button';
     key.className = 'kb-key' + (capturingAction === a.id ? ' capturing' : '');
@@ -725,9 +769,14 @@ function renderKeybinds() {
   }
 }
 
+// Spell rows share one key ('Sort {n}'), the others have their own.
+function actionLabel(a) {
+  return t(a.key, a.keyParams);
+}
+
 function keyLabel(k) {
-  if (k === ' ') return 'Espace';
-  if (k === 'Escape') return 'Échap';
+  if (k === ' ') return t('key.space');
+  if (k === 'Escape') return t('key.escape');
   return k.length === 1 ? k.toUpperCase() : k;
 }
 
@@ -839,7 +888,7 @@ function renameTab(a) {
 async function removeTab(a) {
   // Following a leader that no longer exists would poll a dead view forever.
   if (muleLeader === a.id && muleFollowing) toggleMuleFollow();
-  if (!window.confirm('Supprimer le compte "' + a.name + '" ?')) return;
+  if (!window.confirm(t('account.remove', { name: a.name }))) return;
   await window.touch.accountsRemove(a.id);
   accounts = accounts.filter((x) => x.id !== a.id);
   removeView(a.id);
@@ -872,6 +921,9 @@ async function openSettings() {
   $('res-w').oninput = () => setResolution(Number($('res-w').value), 0, 'width');
   $('res-h').oninput = () => setResolution(0, Number($('res-h').value), 'height');
   $('res-slider').oninput = () => setResolution(Number($('res-slider').value), 0, 'slider');
+  $('lang').value = s.lang || 'auto';
+  // Live like the size preview: pick a language and the dialog is already in it.
+  $('lang').onchange = () => setLang($('lang').value === 'auto' ? autoLang : $('lang').value);
   $('tabbar-side').checked = !!s.tabBarSide;
   $('muted').checked = s.muted;
   $('mute-inactive').checked = !!s.muteInactive;
@@ -892,6 +944,8 @@ async function openSettings() {
 async function saveSettings() {
   const muted = $('muted').checked;
   settings = await window.touch.setSettings({
+    // null means "follow the OS", which is also what the dialog shows as Auto.
+    lang: $('lang').value === 'auto' ? null : $('lang').value,
     resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
     // The user has now chosen a size, so later launches use it instead of
     // filling the screen.
@@ -914,6 +968,7 @@ async function saveSettings() {
     // handled below by applyMute()
   }
   applyMute();
+  setLang(settings.lang || autoLang);
   applyTabBarSide(settings.tabBarSide);
   pushKeybinds();
   pushOwnAccounts();
