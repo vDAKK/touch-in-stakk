@@ -60,6 +60,23 @@ button { font-family: inherit; }
 .brand-name { font-size: 12.5px; letter-spacing: 0.3px; color: var(--text-dim); }
 .brand-name b { color: var(--text); font-weight: 700; letter-spacing: 0.6px; }
 
+/* Custom window controls for the frameless platforms. macOS has a native title
+   bar above this one, so they would be a duplicate there. */
+.win-controls { display: flex; -webkit-app-region: no-drag; height: 100%; }
+html[data-platform="darwin"] .win-controls { display: none; }
+.win-btn {
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-dim);
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.win-btn:hover { background: var(--surface-2); color: var(--text); }
+.win-close:hover { background: var(--danger); color: #fff; }
 .title-link {
   -webkit-app-region: no-drag;
   width: 40px;
@@ -208,7 +225,7 @@ button { font-family: inherit; }
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-.bar-btn svg, .title-link svg { display: block; flex-shrink: 0; }
+.bar-btn svg, .win-btn svg, .title-link svg { display: block; flex-shrink: 0; }
 .bar-btn:hover { background: var(--surface-2); color: var(--text); }
 .bar-btn-end { margin-left: auto; }
 .bar-btn.on { background: var(--accent-soft); color: var(--accent); }

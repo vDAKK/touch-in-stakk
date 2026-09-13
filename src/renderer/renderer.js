@@ -50,6 +50,14 @@ const KEYBIND_ACTIONS = [
   { id: 'spell8', label: 'Sort 8', defaultKey: '8' },
 ];
 
+// Drives the platform rules in style.css: macOS runs a native window, so its
+// own controls replace the custom ones in the brand bar.
+document.documentElement.dataset.platform = window.touch.platform;
+
+$('min').onclick = () => window.touch.windowMinimize();
+$('max').onclick = () => window.touch.windowToggleMaximize();
+$('close').onclick = () => window.touch.windowClose();
+
 // Community link. Replace with your own invite; opened in the default browser
 // (main restricts app:open-external to https).
 const STAKK_DISCORD_URL = 'https://discord.gg/7R2tFcAkMy';

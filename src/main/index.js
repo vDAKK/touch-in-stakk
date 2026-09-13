@@ -25,6 +25,8 @@ const { initAutoUpdate } = require('./updater');
 
 let updater = null;
 
+const isMac = process.platform === 'darwin';
+
 // Fixed so the game's origin (http://127.0.0.1:<port>) is stable across
 // launches and the saved session (cookies/localStorage) is found on relaunch.
 const GAME_PROXY_PORT = 28590;
@@ -176,9 +178,10 @@ async function boot() {
     height: size.height,
     minWidth: 960,
     minHeight: 600,
-    // Native window chrome: real traffic lights and system title bar on macOS,
-    // real minimise/maximise/close on Windows and Linux.
-    frame: true,
+    // macOS keeps the native window chrome (real traffic lights and system
+    // title bar). Windows/Linux stay frameless and draw their own controls in
+    // the brand bar, which is the look the launcher shipped with.
+    frame: isMac,
     backgroundColor: '#14161c',
     title: 'Touch in STAKK',
     icon: path.join(__dirname, '../../build/icon.png'),
@@ -277,6 +280,13 @@ ipcMain.handle('session:prepare', (_e, partition) => {
 ipcMain.on('debug:log', (_e, tag, data) => {
   try { logToFile(String(tag) + ' ' + JSON.stringify(data)); } catch { logToFile(String(tag) + ' <unserializable>'); }
 });
+// The custom titlebar controls (Windows/Linux only — macOS uses its own).
+ipcMain.on('window:minimize', () => mainWindow && mainWindow.minimize());
+ipcMain.on('window:toggle-maximize', () => {
+  if (!mainWindow) return;
+  mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+});
+ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 ipcMain.on('window:toggle-fullscreen', () => {
   if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
 });

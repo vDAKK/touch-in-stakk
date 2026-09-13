@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('touch', {
   broadcastKey: (wcIds, key) => ipcRenderer.invoke('broadcast:key', wcIds, key),
   prepareSession: (partition) => ipcRenderer.invoke('session:prepare', partition),
   previewSize: (w, h) => ipcRenderer.send('window:preview-size', w, h),
+  // The titlebar differs per OS: macOS draws its own window controls, the
+  // others get the custom ones below.
+  platform: process.platform,
+  windowMinimize: () => ipcRenderer.send('window:minimize'),
+  windowToggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+  windowClose: () => ipcRenderer.send('window:close'),
   windowToggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
   signalAttention: () => ipcRenderer.send('window:attention'),
   installUpdate: () => ipcRenderer.invoke('updater:install'),
