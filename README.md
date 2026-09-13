@@ -11,6 +11,8 @@ Ce launcher se base sur le travail de d'autres launcher existant Open Source ou 
 nettoyé du code "malveillant", type récupération des informations personnel de l'utilisateur, 
 capture d'écran de bureau etc.
 
+![Le launcher : un onglet par compte, barre d'outils multi-compte et client Dofus Touch intégré](docs/home.png)
+
 > Non affilié à Ankama Games. Se présenter comme le client Android peut violer les
 > CGU de Dofus Touch — usage à tes risques, avec tes propres identifiants uniquement.
 
@@ -103,9 +105,11 @@ eux). Un même compte garde le même appareil d'un lancement à l'autre.
 
 ## Réglages
 
-Bouton engrenage dans la barre. Résolution (curseur, presets, adaptation à
-l'écran, aperçu en direct), son, multi-compte, confort, raccourcis. Sauvegardés
-dans `userData/settings.json`. Logs dans `userData/logs/app.log`.
+Bouton engrenage dans la barre. Taille de la fenêtre (curseur, presets,
+adaptation à l'écran, aperçu en direct), son, multi-compte, confort, raccourcis.
+Sauvegardés dans `userData/settings.json`. Logs dans `userData/logs/app.log`.
+
+![Fenêtre de réglages : taille de fenêtre, son, confort de jeu, options multi-compte et raccourcis clavier](docs/settings.png)
 
 ## Console du launcher (avancé)
 
