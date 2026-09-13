@@ -1,4 +1,4 @@
-# Auto-harvest (mule farming) — detection notes
+# Auto-harvest (mule farming) | detection notes
 
 Defensive reference for recognising an autonomous resource-farming client on
 Dofus Touch. Written to build **detection**, not a bot. The launcher ships an
