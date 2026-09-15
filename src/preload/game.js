@@ -179,24 +179,46 @@ function gameHook(strings) {
     mount: ['mount', undefined],
   };
 
-  // Select the spell in shortcut-bar slot `index` exactly as tapping it does:
-  // the game then casts it on the next map tap. Going through the bar's own
-  // selectSlot gives the tap behaviour whole: pressing the key again while the
-  // slot is selected deselects it, and once the spell is cast the game itself
-  // calls deselectCurrentSlot, which clears the aim state too.
+  // The shortcut bar the game is currently showing. A controlled hero swaps the
+  // player bar out for the hero bar, and only the visible one holds the slots
+  // the player sees — reading the other returns another character's spells.
+  function shortcutBar() {
+    try {
+      var bars = window.gui.shortcutBarManager.shortcutBars;
+      if (bars.heroBar && bars.heroBar.isVisible && bars.heroBar.isVisible()) return bars.heroBar;
+      return bars.playerBar || null;
+    } catch (e) { return null; }
+  }
+
+  // Drop whatever spell is armed, through the same three calls the client makes
+  // itself after a cast: the bar's selection, the foreground's aim state and
+  // the range/effect overlay. They are separate pieces of state, so clearing
+  // one alone leaves a highlighted slot with no aim, or an aim with no slot.
+  function deselectSpell() {
+    try { window.gui.shortcutBarManager.deselectCurrentSlot(); } catch (e) {}
+    try { window.foreground.deselectSpell(); } catch (e) {}
+    try { window.isoEngine.clearSpellDisplay(); } catch (e) {}
+  }
+
+  // Select the spell in shortcut-bar slot `index` exactly as tapping it does.
+  // The slot's own tap handler calls the bar's _selectSlot(slot, true), and
+  // that is the only entry point that records the selection in _selectedSlot —
+  // which is what the client clears after a cast, via deselectCurrentSlot().
+  // Arming the spell any other way leaves the bar believing nothing is
+  // selected, so that post-cast clear is a no-op and the spell stays armed.
   function selectSpellSlot(index) {
     try {
       var pd = window.gui.playerData;
-      var mgr = window.gui.shortcutBarManager;
-      var bar = mgr && mgr.shortcutBars && mgr.shortcutBars.playerBar;
+      var bar = shortcutBar();
       var slot = bar && bar.getSpellSlotByIndex ? bar.getSpellSlotByIndex(index) : null;
-      if (slot && typeof bar.selectSlot === 'function' && !(slot.isEmpty && slot.isEmpty())) {
-        // Second argument clears the pending spell display, like a real tap.
-        bar.selectSlot(slot, true);
+      if (slot && typeof bar._selectSlot === 'function' &&
+          !(slot.isEmpty && slot.isEmpty()) && slot.enabledBehaviour !== false) {
+        // Second argument clears the pending spell display first, like a tap.
+        bar._selectSlot(slot, true);
         return;
       }
-      // No slot widget (bar not built yet): fall back to the raw events, and
-      // toggle by hand since nothing tracks the selection for us.
+      // No usable slot widget (bar not built yet): fall back to the raw events,
+      // and track the selection by hand since nothing else will.
       var spellId = slot && slot.shortcut && slot.shortcut.spellId;
       if (spellId == null && pd && pd.spellShortcuts) {
         for (var i = 0; i < pd.spellShortcuts.length; i++) {
@@ -205,9 +227,13 @@ function gameHook(strings) {
       }
       if (spellId == null) return;
       var fg = window.foreground;
-      if (fg && fg.isSpellSelected && fg.isSpellSelected() && fg.tapOptions && fg.tapOptions.spellId === spellId) {
-        window.gui.emit('spellSlotDeselected');
-        return;
+      var armed = fg && fg.isSpellSelected && fg.isSpellSelected() && fg.tapOptions
+        ? fg.tapOptions.spellId : null;
+      if (armed != null) {
+        // Something is already armed: clear it either way, and stop there when
+        // it was this very spell (pressing the key twice toggles it off).
+        deselectSpell();
+        if (armed === spellId) return;
       }
       // While a summon is controlled the shortcut bar shows its spells, and a
       // cast must be attributed to it, not to the player.
