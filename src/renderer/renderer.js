@@ -64,6 +64,7 @@ const KEYBIND_ACTIONS = [
   { id: 'alignment', key: 'action.alignment', defaultKey: 'u' },
   { id: 'spouse', key: 'action.spouse', defaultKey: 'v' },
   { id: 'entities', key: 'action.entities', defaultKey: 'z' },
+  { id: 'passTurn', key: 'action.passTurn', defaultKey: ' ' },
   { id: 'close', key: 'action.close', defaultKey: 'Escape' },
   { id: 'spell1', key: 'action.spell', keyParams: { n: 1 }, defaultKey: '1' },
   { id: 'spell2', key: 'action.spell', keyParams: { n: 2 }, defaultKey: '2' },

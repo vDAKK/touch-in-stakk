@@ -262,6 +262,27 @@ function gameHook(strings) {
     return pd.id;
   }
 
+  // End the fight turn — the very call the timeline's end-turn button makes
+  // (its TurnReadyPressed handler is gui.fightManager.finishTurn()). Going
+  // through fightManager keeps its own bookkeeping: the pending-request flag
+  // that swallows a second press, and the per-turn cast list it resets.
+  //
+  // Guarded on the client's own turn state rather than a tally of our own: only
+  // the fighter taking the turn can end it, and a controlled summon takes its
+  // own turn, which is equally ours to end.
+  function passTurn() {
+    try {
+      var fm = window.gui && window.gui.fightManager;
+      if (!fm || !fm.isInBattle || !fm.isInBattle()) return;
+      if (fm.isFightersTurn && !fm.isFightersTurn(controlledId(window.gui.playerData))) return;
+      if (fm.getIsTurnEndRequestPending && fm.getIsTurnEndRequestPending()) return;
+      // A spell left armed would outlive the turn it was aimed for.
+      deselectSpell();
+      if (typeof fm.finishTurn === 'function') fm.finishTurn();
+      else send('GameFightTurnFinishMessage', {});
+    } catch (e) {}
+  }
+
   // The touch client asks to confirm a move or a spell cast (tap once to aim,
   // again to confirm). On desktop that is just an extra click, so switch those
   // options off: walking confirm is a bool, the cast ones use NEVER = 0.
@@ -1832,6 +1853,10 @@ function gameHook(strings) {
     }
     if (action === 'entities') {
       clickEntitiesToggle();
+      return;
+    }
+    if (action === 'passTurn') {
+      passTurn();
       return;
     }
     var spell = /^spell(\d+)$/.exec(action);

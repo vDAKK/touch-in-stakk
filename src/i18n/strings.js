@@ -146,6 +146,7 @@ const FR = {
   'action.alignment': 'Alignement',
   'action.spouse': 'Conjoint',
   'action.entities': 'Afficher les entités',
+  'action.passTurn': 'Passer le tour',
   'action.close': 'Fermer les interfaces',
   'action.spell': 'Sort {n}',
 
@@ -315,6 +316,7 @@ const EN = {
   'action.alignment': 'Alignment',
   'action.spouse': 'Spouse',
   'action.entities': 'Show entities',
+  'action.passTurn': 'End turn',
   'action.close': 'Close interfaces',
   'action.spell': 'Spell {n}',
 
