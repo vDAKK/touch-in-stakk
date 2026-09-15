@@ -1,4 +1,4 @@
-# Dofus Touch sur PC | Touch in STAKK
+# Dofus Touch sur PC | Touch in STAKK | UP
 
 **Français** · [English](README.en.md)
 
