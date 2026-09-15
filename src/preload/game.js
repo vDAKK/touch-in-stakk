@@ -401,6 +401,12 @@ function gameHook(strings) {
   var CROSS_TIMEOUT_MS = 15000;
   var travelAbort = false;
 
+  // A fight starting mid-trip ends the trip: hopping maps while the client is
+  // in fight state desyncs it (the engine keeps walking a character the server
+  // has moved into a fight). The fight itself is untouched — harvest resumes on
+  // its own once the fight ends, a manual trip simply stops there.
+  function travelStopped() { return travelAbort || inFight(); }
+
   function tSleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function charIdle() {
     var am = window.actorManager;
@@ -610,6 +616,7 @@ function gameHook(strings) {
     var dirs = onlyDirs || hopDirections(dx, dy);
     var here = mapCoords();
     for (var i = 0; i < dirs.length; i++) {
+      if (travelStopped()) return false;
       var dir = dirs[i];
       var neighbourId = iso.mapRenderer.map[dir + 'NeighbourId'];
       // No neighbour registered that way — don't bother walking to the border.
@@ -632,7 +639,7 @@ function gameHook(strings) {
 
       for (var j = 0; j < cells.length && j < EXIT_CELLS_TRIED; j++) {
         for (var attempt = 0; attempt < EXIT_CELL_RETRIES; attempt++) {
-          if (travelAbort) return false;
+          if (travelStopped()) return false;
 
           // Never stack a request on top of a transition still in flight.
           await waitFor(function () {
@@ -647,7 +654,7 @@ function gameHook(strings) {
           // refused — detect that instead of waiting out the full timeout.
           var t0 = Date.now(), idleSince = null, crossed = false;
           while (Date.now() - t0 < CROSS_TIMEOUT_MS) {
-            if (travelAbort) return false;
+            if (travelStopped()) return false;
             if (iso.mapRenderer.mapId !== fromMap) { crossed = true; break; }
             if (charIdle()) {
               if (idleSince === null) idleSince = Date.now();
@@ -692,6 +699,9 @@ function gameHook(strings) {
     if (target.worldX == null || target.worldY == null) {
       return emit({ type: 'travel-done', ok: false, reason: 'no-target' });
     }
+    // Nothing to do from inside a fight, and starting one would leave the
+    // engine walking while the server has us fighting.
+    if (inFight()) return emit({ type: 'travel-done', ok: false, reason: 'fight' });
 
     var here = mapCoords();
     if (!here) return emit({ type: 'travel-done', ok: false, reason: 'no-position' });
@@ -713,7 +723,10 @@ function gameHook(strings) {
 
     var stuck = 0, replans = 0;
     for (var step = 0; step < route.length && step < TRAVEL_MAX_HOPS; step++) {
-      if (travelAbort) return emit({ type: 'travel-done', ok: false, reason: 'aborted' });
+      if (travelStopped()) {
+        return emit({ type: 'travel-done', ok: false,
+                      reason: travelAbort ? 'aborted' : 'fight' });
+      }
       await waitFor(function () { return iso.mapRenderer.isReady; }, 10000);
 
       var c = mapCoords();
