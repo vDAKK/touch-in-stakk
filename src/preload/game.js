@@ -180,13 +180,23 @@ function gameHook(strings) {
   };
 
   // Select the spell in shortcut-bar slot `index` exactly as tapping it does:
-  // the game then casts it on the next map tap.
+  // the game then casts it on the next map tap. Going through the bar's own
+  // selectSlot gives the tap behaviour whole: pressing the key again while the
+  // slot is selected deselects it, and once the spell is cast the game itself
+  // calls deselectCurrentSlot, which clears the aim state too.
   function selectSpellSlot(index) {
     try {
       var pd = window.gui.playerData;
       var mgr = window.gui.shortcutBarManager;
       var bar = mgr && mgr.shortcutBars && mgr.shortcutBars.playerBar;
       var slot = bar && bar.getSpellSlotByIndex ? bar.getSpellSlotByIndex(index) : null;
+      if (slot && typeof bar.selectSlot === 'function' && !(slot.isEmpty && slot.isEmpty())) {
+        // Second argument clears the pending spell display, like a real tap.
+        bar.selectSlot(slot, true);
+        return;
+      }
+      // No slot widget (bar not built yet): fall back to the raw events, and
+      // toggle by hand since nothing tracks the selection for us.
       var spellId = slot && slot.shortcut && slot.shortcut.spellId;
       if (spellId == null && pd && pd.spellShortcuts) {
         for (var i = 0; i < pd.spellShortcuts.length; i++) {
@@ -194,6 +204,11 @@ function gameHook(strings) {
         }
       }
       if (spellId == null) return;
+      var fg = window.foreground;
+      if (fg && fg.isSpellSelected && fg.isSpellSelected() && fg.tapOptions && fg.tapOptions.spellId === spellId) {
+        window.gui.emit('spellSlotDeselected');
+        return;
+      }
       // While a summon is controlled the shortcut bar shows its spells, and a
       // cast must be attributed to it, not to the player.
       window.gui.emit('spellSlotSelected', controlledId(pd), spellId);
