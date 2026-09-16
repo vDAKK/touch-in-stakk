@@ -6,6 +6,113 @@
 //     (the tab manager) over window.postMessage <-> ipcRenderer.sendToHost.
 const { ipcRenderer } = require('electron');
 
+// --- Bridge guard ------------------------------------------------------------
+// The hook runs in the page's main world, shared with the game and with the
+// third-party lindo shell. Anything there can call window.postMessage, so an
+// unguarded relay would let page code drive the launcher (broadcast keys to
+// every account, switch tabs, start a trip). A message is relayed only when it
+// comes from this window, carries this load's token, and names a type on one of
+// the lists below.
+//
+// This removes the accidental and drive-by paths. It is not a defence against
+// code actively attacking the bridge — a hostile main world can read the
+// injected script — which a shared main world does not allow us to do.
+//
+// This preload is sandboxed: no node require beyond 'electron', so the lists
+// live here rather than in a module, and the token comes from the Web Crypto
+// global. test/bridge-guard.test.js reads them back out of this file.
+
+// Events the hook reports upward, to the renderer host.
+const HOOK_EVENTS = [
+  'automation-interrupted',
+  'challenge-invite',
+  'disconnected',
+  'eval-result',
+  'fight-started',
+  'harvest-progress',
+  'harvest-skip',
+  'harvest-state',
+  'harvest-status',
+  'identity',
+  'join-fight-seen',
+  'my-turn',
+  'party-debug',
+  'party-invite',
+  'portrait',
+  'position',
+  'resource-debug',
+  'spoof-error',
+  'stats',
+  'status',
+  'travel-debug',
+  'travel-done',
+  'travel-hook',
+  'travel-plan',
+  'travel-progress',
+  'travel-replan',
+  'travel-started',
+  'whisper',
+  'windows-debug',
+];
+
+// Commands the renderer host sends down to the hook.
+const HOST_COMMANDS = [
+  'action',
+  'capture-portrait',
+  'eval',
+  'expect-invite',
+  'follow',
+  'get-position',
+  'harvest-start',
+  'harvest-status',
+  'harvest-stop',
+  'harvest-toggle',
+  'hide-shop',
+  'invite',
+  'join-fight',
+  'mule-follow',
+  'no-confirm',
+  'own-accounts',
+  'ready',
+  'resource-overlay',
+  'strings',
+  'travel',
+  'travel-cancel',
+  'travel-debug',
+  'windows-debug',
+];
+
+function isAllowed(list, payload) {
+  return (
+    !!payload &&
+    typeof payload === 'object' &&
+    typeof payload.type === 'string' &&
+    list.indexOf(payload.type) >= 0
+  );
+}
+
+// One secret per webview load, injected into our own hook and required on every
+// bridge message. Page code that merely posts `{__qol: ...}` (the game, the
+// third-party lindo shell) does not have it, so its messages are dropped.
+function makeToken() {
+  try {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    const b = new Uint8Array(16);
+    window.crypto.getRandomValues(b);
+    return Array.from(b, (n) => n.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return 'tok-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
+}
+const BRIDGE_TOKEN = makeToken();
+
+// postMessage target: the page's own origin, never '*', so a message meant for
+// the hook cannot leak to an embedded frame of another origin.
+function selfOrigin() {
+  const o = window.location && window.location.origin;
+  return o && o !== 'null' ? o : '*';
+}
+
 // Make the page itself look like the tablet the HTTP headers already claim.
 // Header spoofing alone is not enough: the client reads navigator and screen
 // directly, and a Mac desktop signature there contradicts the Android user
@@ -100,9 +207,16 @@ function keepAlive() {
 
 // Runs in the page's MAIN world. No node/ipc access here — it talks to the
 // preload only through window.postMessage, so the game keeps no privileged refs.
-function gameHook(strings) {
+function gameHook(strings, token, commands) {
   // Messages this hook draws inside the game, in the launcher's language.
   var S = strings || {};
+  // Bridge guard, mirrored from the preload: the token proves a message comes
+  // from the launcher and not from some other script in this main world, and
+  // `commands` is the list of command types the hook will act on.
+  var TOKEN = token;
+  var CMDS = commands || [];
+  var ORIGIN = (window.location && window.location.origin) || '*';
+  if (ORIGIN === 'null') ORIGIN = '*';
   function t(key, params) {
     var out = S[key] != null ? S[key] : key;
     if (params) Object.keys(params).forEach(function (name) {
@@ -125,7 +239,7 @@ function gameHook(strings) {
 
   function emit(payload) {
     try {
-      window.postMessage({ __qol: 'event', payload }, '*');
+      window.postMessage({ __qol: 'event', token: TOKEN, payload: payload }, ORIGIN);
     } catch (e) {}
   }
 
@@ -733,9 +847,15 @@ function gameHook(strings) {
     installManualWatch();
     if (!onManualAction) onManualAction = abortAutomation;
     beginSelf();
+    travelActive = true;
+    emitStatus();
     try {
       return await travelToInner(target);
-    } finally { endSelf(); }
+    } finally {
+      endSelf();
+      travelActive = false;
+      emitStatus();
+    }
   }
 
   async function travelToInner(target) {
@@ -1477,6 +1597,7 @@ function gameHook(strings) {
     });
     if (harvest.on) return;
     harvest.on = true;
+    emitStatus();
     harvest.gathered = 0;
     harvest.index = 0;
     _elemPos = {};
@@ -1491,6 +1612,7 @@ function gameHook(strings) {
   function harvestStop() {
     harvest.on = false;
     travelAbort = true;
+    emitStatus();
   }
 
   function travelDebug() {
@@ -1880,10 +2002,13 @@ function gameHook(strings) {
   }
 
   // Commands from the renderer host (relayed by the preload as window messages).
+  // Only same-window messages carrying this load's token and a known command
+  // type are acted on; anything else in the main world is ignored.
   window.addEventListener('message', function (e) {
-    if (!e.data || e.data.__qol !== 'cmd') return;
+    if (e.source !== window) return;
+    if (!e.data || e.data.__qol !== 'cmd' || e.data.token !== TOKEN) return;
     var p = e.data.payload;
-    if (!p) return;
+    if (!p || typeof p.type !== 'string' || CMDS.indexOf(p.type) < 0) return;
     if (p.type === 'strings') {
       // The user switched language in the launcher: later messages use it, no
       // reload needed.
@@ -1980,6 +2105,94 @@ function gameHook(strings) {
     }
   });
 
+  // Switching character does not reload the page, so the hook survives — but
+  // the client rebuilds its option store and its DOM for the new character,
+  // which drops everything we applied for the previous one. Watch the character
+  // and re-apply on every change (and repair a drift, since the options can
+  // also be reset a moment after the character is entered).
+  var currentCharId = null;
+
+  function characterId() {
+    try {
+      var pd = window.gui && window.gui.playerData;
+      if (!pd) return null;
+      var ci = pd.characterBaseInformations;
+      if (ci && ci.id != null) return ci.id;
+      return pd.id != null ? pd.id : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applyAccountSettings() {
+    // The options module may have been rebuilt with the character.
+    _opts = null;
+    if (noConfirm) applyNoConfirm(true);
+    if (showResources) setResourceOverlay(true);
+    if (hideShop) setHideShop(true);
+  }
+
+  function noConfirmDrifted() {
+    if (!noConfirm) return false;
+    var o = optionsStore();
+    return !!o && (o.confirmBoxWhenWalking !== false || o.confirmBoxWhenClickCasting !== 0);
+  }
+
+  function onCharacterChanged() {
+    applyAccountSettings();
+    // Session gains are per character: keep the previous one's totals out of
+    // the new one's counter.
+    base.xp = null;
+    base.kamas = null;
+    session.xp = 0;
+    session.kamas = 0;
+    readGains();
+    // The tab name and the "own accounts" list follow the character, not the
+    // launcher account.
+    try {
+      var ci = window.gui && window.gui.playerData && window.gui.playerData.characterBaseInformations;
+      if (ci) emit({ type: 'identity', name: ci.name, id: window.gui.playerData.id });
+    } catch (e) {}
+  }
+
+  function watchCharacter() {
+    var id = characterId();
+    if (id == null) {
+      emitStatus();
+      return;
+    }
+    if (id !== currentCharId) {
+      currentCharId = id;
+      onCharacterChanged();
+      emitStatus();
+      return;
+    }
+    // Same character, but the client reset the options behind our back.
+    if (noConfirmDrifted()) applyNoConfirm(true);
+    emitStatus();
+  }
+
+  // --- Account status, for the launcher's tab badges --------------------------
+  // What this account is doing, so a background tab says it without being
+  // opened: in game or not, in a fight, whose turn it is, and whether an
+  // automation is running. Emitted only when it changes.
+  var myTurn = false;
+  var travelActive = false;
+  var lastStatusKey = '';
+
+  function emitStatus() {
+    try {
+      var online = characterId() != null;
+      var fighting = online && inFight();
+      var busy = harvest.on ? 'harvest' : (travelActive ? 'travel' : null);
+      var turn = fighting && myTurn;
+      var key = online + '|' + fighting + '|' + turn + '|' + busy;
+      if (key === lastStatusKey) return;
+      lastStatusKey = key;
+      emit({ type: 'status', online: online, inFight: fighting, myTurn: turn, busy: busy });
+    } catch (e) {}
+  }
+
   function onGuiReady(gui) {
     // The world map canvas only exists once the window has been opened once.
     try {
@@ -1988,17 +2201,9 @@ function gameHook(strings) {
     watchContextMenus();
     setInterval(installTravelHook, 3000);
 
-    if (noConfirm) applyNoConfirm(true);
-    if (showResources) setResourceOverlay(true);
-    if (hideShop) setHideShop(true);
-    readGains();
+    watchCharacter();
+    setInterval(watchCharacter, 1500);
     setInterval(readGains, 4000);
-
-    // Report this account's character so the host can coordinate accounts.
-    try {
-      var ci = gui.playerData && gui.playerData.characterBaseInformations;
-      if (ci) emit({ type: 'identity', name: ci.name, id: gui.playerData.id });
-    } catch (e) {}
 
     // One-shot: report the client's real window ids to app.log so wrong
     // ACTION_WINDOW ids (dead interface shortcuts) can be corrected. Delayed so
@@ -2112,11 +2317,12 @@ function gameHook(strings) {
       }
     } catch (e) {}
 
-    gui.on('GameFightStartMessage', function () { fightSeen = true; });
-    gui.on('GameFightEndMessage', function () { fightSeen = false; });
-    gui.on('GameContextDestroyMessage', function () { fightSeen = false; });
+    gui.on('GameFightStartMessage', function () { fightSeen = true; emitStatus(); });
+    gui.on('GameFightEndMessage', function () { fightSeen = false; myTurn = false; emitStatus(); });
+    gui.on('GameContextDestroyMessage', function () { fightSeen = false; myTurn = false; emitStatus(); });
     gui.on('GameFightStartingMessage', function (msg) {
       fightSeen = true;
+      emitStatus();
       try {
         var c = mapCoords();
         emit({ type: 'fight-started', fightId: msg && msg.fightId,
@@ -2129,7 +2335,15 @@ function gameHook(strings) {
 
     gui.on('GameFightTurnStartMessage', function (msg) {
       try {
-        if (msg && msg.id === gui.playerData.id) emit({ type: 'my-turn' });
+        // Someone else's turn ends ours, which is what clears the tab badge.
+        myTurn = !!(msg && msg.id === gui.playerData.id);
+        if (myTurn) emit({ type: 'my-turn' });
+        emitStatus();
+      } catch (e) {}
+    });
+    gui.on('GameFightTurnEndMessage', function (msg) {
+      try {
+        if (msg && msg.id === gui.playerData.id) { myTurn = false; emitStatus(); }
       } catch (e) {}
     });
 
@@ -2170,7 +2384,10 @@ function gameHook(strings) {
 
     // This account lost its connection to the game server.
     gui.on('disconnect', function () {
+      currentCharId = null;
+      myTurn = false;
       emit({ type: 'disconnected' });
+      emitStatus();
     });
 
     // Auto-accept a trade coming from one of the user's own accounts.
@@ -2222,7 +2439,11 @@ function gameHook(strings) {
 let gameLang = {};
 function injectHook() {
   const script = document.createElement('script');
-  script.textContent = '(' + gameHook.toString() + ')(' + JSON.stringify(gameLang) + ');';
+  script.textContent =
+    '(' + gameHook.toString() + ')(' +
+    JSON.stringify(gameLang) + ',' +
+    JSON.stringify(BRIDGE_TOKEN) + ',' +
+    JSON.stringify(HOST_COMMANDS) + ');';
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 }
@@ -2269,18 +2490,30 @@ function injectLayoutFix() {
   (document.head || document.documentElement).appendChild(style);
 }
 
-// main-world hook -> renderer host
+// main-world hook -> renderer host. Three checks before anything reaches the
+// launcher: the message is from this window, it carries this load's token, and
+// its type is one the hook is known to emit.
 window.addEventListener('message', (e) => {
-  if (!e.data || e.data.__qol !== 'event') return;
-  ipcRenderer.sendToHost('qol', e.data.payload);
+  if (e.source !== window) return;
+  const d = e.data;
+  if (!d || d.__qol !== 'event' || d.token !== BRIDGE_TOKEN) return;
+  if (!isAllowed(HOOK_EVENTS, d.payload)) return;
+  ipcRenderer.sendToHost('qol', d.payload);
 });
 
 // renderer host -> main-world hook
+function postCmd(payload) {
+  if (!isAllowed(HOST_COMMANDS, payload)) return;
+  try {
+    window.postMessage({ __qol: 'cmd', token: BRIDGE_TOKEN, payload }, selfOrigin());
+  } catch (e) {}
+}
+
 ipcRenderer.on('qol', (_e, payload) => {
   // Remember the strings: the hook may not be injected yet when the language
   // arrives, and a later reinjection has to carry them.
   if (payload && payload.type === 'strings') gameLang = payload.strings || {};
-  window.postMessage({ __qol: 'cmd', payload }, '*');
+  postCmd(payload);
 });
 
 // Whether this webview is the active broadcast source (set by the host).
@@ -2289,11 +2522,23 @@ ipcRenderer.on('bcast-mode', (_e, on) => {
   bcastSource = !!on;
 });
 
-// User keybinds for this account: triggerKey -> action id.
-let keyToAction = {};
+// User keybinds for this account, as two lookup tables built by the renderer:
+// by typed character, and by physical key (event.code) for the number row —
+// on AZERTY its unshifted characters are & é " ' ( - è _, so a spell bound to
+// the position keeps working without Shift. See src/shared/keys.js.
+let keyTables = { keys: {}, codes: {} };
 ipcRenderer.on('keybinds', (_e, map) => {
-  keyToAction = map || {};
+  if (map && (map.keys || map.codes)) keyTables = { keys: map.keys || {}, codes: map.codes || {} };
+  else keyTables = { keys: map || {}, codes: {} };   // legacy flat map
 });
+
+// The digit a key carries whatever the layout prints on it.
+function digitOfEvent(e) {
+  const m = typeof e.code === 'string' ? e.code.match(/^(?:Digit|Numpad)([0-9])$/) : null;
+  if (m) return Number(m[1]);
+  if (e.key >= '0' && e.key <= '9' && e.key.length === 1) return Number(e.key);
+  return null;
+}
 
 function isTyping() {
   const el = document.activeElement;
@@ -2383,8 +2628,9 @@ window.addEventListener(
       return;
     }
     let hk = null;
+    const digit = e.ctrlKey ? digitOfEvent(e) : null;
     if (e.key === 'F2' && !e.ctrlKey && !e.altKey) hk = { name: 'ready-all' };
-    else if (e.ctrlKey && e.key >= '1' && e.key <= '9') hk = { name: 'switch', index: Number(e.key) - 1 };
+    else if (digit != null && digit >= 1) hk = { name: 'switch', index: digit - 1 };
     else if (e.ctrlKey && e.key === 'Tab') hk = { name: 'cycle', dir: e.shiftKey ? -1 : 1 };
     if (hk) {
       e.preventDefault();
@@ -2395,13 +2641,13 @@ window.addEventListener(
     // Auto-repeat while a key is held would re-fire a toggle (show/hide/show…).
     if (e.repeat) return;
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !isTyping();
-    const action = plain ? keyToAction[e.key] : null;
+    const action = plain ? (keyTables.keys[e.key] || keyTables.codes[e.code] || null) : null;
     // A bound key triggers its game action on this (active) account, and mirrors
     // it to the other accounts when broadcast is on.
     if (action) {
       e.preventDefault();
       e.stopPropagation();
-      window.postMessage({ __qol: 'cmd', payload: { type: 'action', action } }, '*');
+      postCmd({ type: 'action', action });
       if (bcastSource) ipcRenderer.sendToHost('bcast-action', { action });
       return;
     }
