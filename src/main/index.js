@@ -16,11 +16,11 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const { loadSettings, saveSettings } = require('./settings');
-const { fetchPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION } = require('./patcher');
+const { loadPatchSet, lindoFilesFromManifest, fetchAppVersion, FALLBACK_APP_VERSION, VENDOR_DIR } = require('./patcher');
 const { startProxy } = require('./proxy');
 const { prepareSession, seedOf } = require('./session-prep');
 const { deviceProfile } = require('./spoof');
-const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts } = require('./accounts');
+const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts, setAccountSettings } = require('./accounts');
 const { initAutoUpdate } = require('./updater');
 const { resolveLang } = require('../i18n/strings');
 
@@ -35,6 +35,7 @@ const GAME_PROXY_PORT = 28590;
 let mainWindow = null;
 let proxy = null;
 let patchOk = false;
+let patchSource = 'none';
 
 function userDataDir() {
   return app.getPath('userData');
@@ -62,26 +63,37 @@ function isAnkamaHost(url) {
   return ANKAMA_HOSTS.some((h) => host === h || host.endsWith('.' + h));
 }
 
-// Fetches the community patch set and (re)starts the local proxy with it.
-// On failure the proxy still starts (with no patches) so the app never hangs;
-// patchOk lets the renderer surface the problem and offer a retry.
+// Loads the community patch set — pinned commit, then the last cached set,
+// then the copy vendored in the app — and (re)starts the local proxy with it.
+// Only when all three fail does the proxy start unpatched; patchOk lets the
+// renderer surface that and offer a retry.
 async function startOrRestartProxy() {
-  let regexMap = {};
-  let lindoFiles = {};
-  try {
-    const patchSet = await fetchPatchSet();
-    regexMap = patchSet.regexMap;
-    lindoFiles = lindoFilesFromManifest(patchSet.manifest);
-    patchOk = true;
-    logToFile('patch fetch OK, files=' + Object.keys(lindoFiles).join(','));
-  } catch (e) {
-    patchOk = false;
-    logToFile('patch fetch FAILED: ' + e.message + ' | code=' + (e.code || '') + ' | ' + String(e.stack || '').split('\n')[0]);
-  }
+  const set = await loadPatchSet({
+    cacheFile: path.join(userDataDir(), 'patchset.json'),
+    log: logToFile,
+  });
+  patchSource = set.source;
+  patchOk = set.source !== 'none';
+  const lindoFiles = lindoFilesFromManifest(set.manifest, set.source === 'vendor' ? VENDOR_DIR : null);
+  logToFile('patch set source=' + set.source + ' files=' + Object.keys(lindoFiles).join(','));
+
   const appVersion = await fetchAppVersion().catch(() => FALLBACK_APP_VERSION);
-  const versions = { appVersion, buildVersion: appVersion };
+  // buildVersion is left empty on purpose: it is the game's own build number,
+  // which the proxy reads out of build/script.js. The App Store version is a
+  // different thing and putting it here made the shell announce a build that
+  // never existed.
+  const versions = { appVersion, buildVersion: '' };
   if (proxy) proxy.close();
-  proxy = await startProxy({ regexMap, lindoFiles, versions, port: GAME_PROXY_PORT });
+  proxy = await startProxy({
+    regexMap: set.regexMap,
+    lindoFiles,
+    versions,
+    port: GAME_PROXY_PORT,
+    // NOT 'cache': on a case-insensitive filesystem that is Chromium's own
+    // disk cache directory (userData/Cache), which it wipes at startup.
+    cacheDir: path.join(userDataDir(), 'proxy-cache'),
+    log: logToFile,
+  });
   return patchOk;
 }
 
@@ -204,6 +216,12 @@ async function boot() {
     return { action: 'deny' };
   });
 
+  // The launcher's own console was the one thing not reaching app.log, which
+  // made a broken renderer (or a blocked script) look like "nothing happens".
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    logToFile('renderer console[' + level + '] ' + message + ' (' + sourceId + ':' + line + ')');
+  });
+
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
   updater = initAutoUpdate(app, (ch, payload) => {
@@ -247,12 +265,17 @@ ipcMain.handle('app:open-external', (_e, url) => {
   return true;
 });
 ipcMain.handle('patch:status', () => patchOk);
+// Which of the three sources the running patch set came from (remote / cache /
+// vendor / none), for the log and for support questions.
+ipcMain.handle('patch:source', () => patchSource);
 ipcMain.handle('patch:retry', () => startOrRestartProxy());
 ipcMain.handle('accounts:list', () => loadAccounts(userDataDir()));
 ipcMain.handle('accounts:add', (_e, name) => addAccount(userDataDir(), name));
 ipcMain.handle('accounts:rename', (_e, id, name) => renameAccount(userDataDir(), id, name));
 ipcMain.handle('accounts:remove', (_e, id) => removeAccount(userDataDir(), id));
 ipcMain.handle('accounts:reorder', (_e, ids) => reorderAccounts(userDataDir(), ids));
+// Per-account settings: { custom, settings } — see src/shared/account-settings.js.
+ipcMain.handle('accounts:set-settings', (_e, id, patch) => setAccountSettings(userDataDir(), id, patch));
 // Inject a real key event into each target account's game webview (multibox
 // broadcast). sendInputEvent produces trusted input the game acts on.
 ipcMain.handle('broadcast:key', (_e, wcIds, key) => {

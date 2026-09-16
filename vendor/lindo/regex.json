@@ -1,0 +1,77 @@
+{
+     "build/script.js":
+     [
+          [
+               "cdvfile://localhost/persistent/data/assets",
+               "../assets"
+          ],
+          [
+               "return t\\.m = e, t\\.c = i, t\\.p = \"\", t\\(0\\)",
+               "window.singletons = t;\nreturn t.m = e, t.c = i, t.p = \"\", t(0)"
+          ],
+          [
+               "window\\.Config\\.analytics",
+               "null"
+          ],
+          [
+               "(\\w{1,2}\\.overrideConsole\\s?=)\\s?(function\\(\\))",
+               "$1 function() {}; !1 && $2"
+          ],
+          [
+               "(\\w{1,2}\\.logUncaughtExceptions\\s?=)\\s?(function\\()",
+               "$1 function() {}; !1 && $2"
+          ],
+          [
+               "(language:\\s?window\\.Config\\s?\\?[\\s\\S]{1,200}client:\\s?)([^,\n]*)([\\s\\S]{1,200}appVersion:\\s?)([^,\n]*)([\\s\\S]{1,200}buildVersion:\\s?)([^,\n]*)",
+               "$1\"android\"$3window._[\"appVersion\"]$5window._[\"buildVersion\"]"
+          ],
+          [
+               "(var\\s*[a-z]*\\s*=\\s*this,\n*\\s*[a-z]*\\s=\\s*window\\.dofus\\.connectionManager;\n\\s*i.on\\(\"ServersListMessage\",)",
+               "window.d = this; \n $1"
+          ],
+          [
+               "(\\w{1,2}\\.exports\\s?=\\s?(\\w{1,2}),\\s?)(\\w{1,2}\\.prototype\\.setLook)",
+               "$1window.CharacterDisplay = $2, $3"
+          ],
+          [
+               "(, window\\.fetch\\(.+/logger)",
+               "; top.console.log(n); return null $1"
+          ],
+          [
+               "(var (\\w) = {\\s+call: \\w,\\s+data: \\w\\s+};)",
+               "$1 window.top.FileLoggerLib && window.top.FileLoggerLib.writeLindoLog($2);"
+          ],
+          [
+               "(}\\), \\w\\.on\\(\\\"data\\\", function\\((\\w)\\) {)",
+               "$1 window.top.FileLoggerLib && window.top.FileLoggerLib.writeLindoLog($2);"
+          ],
+          [
+               "Math\\.min\\(Math\\.max\\((\\w),\\s?(\\w)\\),\\s?this\\.maxZoom\\)",
+               "Math.max($1, $2)"
+          ],
+          [
+               "=\\s?\\w\\.viewport(Width|Height)\\s?\\|\\|",
+               "="
+          ],
+          [
+               "(getText\\s?=(?:[^;}]|\n)*?var\\s\\w{1,2}\\s?=\\s?)((\\w{1,2})\\[\\w{1,2}\\])",
+               "$1$3 ? $2 : 'CHANGE GAME LANGUAGE'"
+          ],
+          [
+               "(_\\.initDBFallback\\(\\w{1,2}\\.getDataMap,\\s?\\w{1,2}\\))",
+               "(new window.Primus('https://proxyconnection.touch.dofus.com?STICKER='+window.Config.sessionId)).on('open',()=>{$1})"
+          ],
+          [
+               "new (\\w)\\(document\\.getElementsByClassName\\(\"dofusBody\"\\)\\[0\\]\\)",
+               "new $1(document.getElementById(\"dofusBody\"))"
+          ]
+     ],
+
+     "build/styles-native.css": [
+          [
+               "cdvfile://localhost/persistent/data/assets",
+               "../assets"
+          ]
+     ]
+
+}
