@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('touch', {
   getGameUrl: () => ipcRenderer.invoke('game:url'),
   getGamePreloadUrl: () => ipcRenderer.invoke('game:preload-path'),
   getPatchStatus: () => ipcRenderer.invoke('patch:status'),
+  // 'remote' | 'cache' | 'vendor' | 'none' — where the running patch set came from.
+  getPatchSource: () => ipcRenderer.invoke('patch:source'),
   retryPatch: () => ipcRenderer.invoke('patch:retry'),
   getAppVersion: () => ipcRenderer.invoke('app:version'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
@@ -15,6 +17,8 @@ contextBridge.exposeInMainWorld('touch', {
   accountsRename: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),
   accountsRemove: (id) => ipcRenderer.invoke('accounts:remove', id),
   accountsReorder: (ids) => ipcRenderer.invoke('accounts:reorder', ids),
+  // patch: { custom?: boolean, settings?: {...} } for one account.
+  accountsSetSettings: (id, patch) => ipcRenderer.invoke('accounts:set-settings', id, patch),
   broadcastKey: (wcIds, key) => ipcRenderer.invoke('broadcast:key', wcIds, key),
   prepareSession: (partition) => ipcRenderer.invoke('session:prepare', partition),
   previewSize: (w, h) => ipcRenderer.send('window:preview-size', w, h),

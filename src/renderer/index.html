@@ -47,6 +47,7 @@
       <button id="add-tab" class="bar-btn" data-i18n-title="bar.addAccount" data-i18n-aria="bar.addAccount">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
+      <div id="tools">
       <button id="group-auto" class="bar-btn bar-btn-end" data-i18n-title="bar.group" data-i18n-aria="bar.groupAria">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
@@ -65,6 +66,7 @@
       <button id="open-settings" class="bar-btn" data-i18n-title="bar.settings" data-i18n-aria="bar.settings">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
+      </div>
     </nav>
 
     <main id="views"></main>
@@ -91,11 +93,21 @@
           <h2 data-i18n="settings.title"></h2>
           <span class="modal-sub" data-i18n="settings.sub"></span>
         </div>
+
+        <div class="settings-scope">
+          <label class="scope-label" for="scope-select" data-i18n="settings.scope.label"></label>
+          <select id="scope-select" class="select-input" data-i18n-aria="settings.scope.label"></select>
+          <label id="scope-custom-row" class="scope-custom" for="scope-custom" hidden>
+            <input id="scope-custom" type="checkbox" class="switch" />
+            <span data-i18n="settings.scope.custom"></span>
+          </label>
+          <span id="scope-hint" class="field-hint"></span>
+        </div>
         <div class="modal-body">
 
           <section class="settings-section">
             <h3 data-i18n="settings.window"></h3>
-            <div class="field">
+            <div class="field" data-scope="global">
               <div class="field-text">
                 <span class="field-label" data-i18n="field.lang.label"></span>
                 <span class="field-desc" data-i18n="field.lang.desc"></span>
@@ -106,7 +118,7 @@
                 <option value="en" data-i18n="lang.en"></option>
               </select>
             </div>
-            <div class="field">
+            <div class="field" data-scope="global">
               <div class="field-text">
                 <span class="field-label" data-i18n="field.size.label"></span>
                 <span class="field-desc" data-i18n="field.size.desc"></span>
@@ -117,12 +129,12 @@
                 <input id="res-h" type="number" min="600" step="8" data-i18n-aria="aria.height" />
               </div>
             </div>
-            <div class="res-slider-row">
+            <div class="res-slider-row" data-scope="global">
               <input id="res-slider" type="range" min="960" step="8" data-i18n-aria="aria.windowSize" />
               <span id="res-hint" class="field-hint"></span>
             </div>
-            <div id="res-presets" class="res-presets"></div>
-            <label class="field toggle-field" for="tabbar-side">
+            <div id="res-presets" class="res-presets" data-scope="global"></div>
+            <label class="field toggle-field" data-scope="global" for="tabbar-side">
               <div class="field-text">
                 <span class="field-label" data-i18n="field.tabside.label"></span>
                 <span class="field-desc" data-i18n="field.tabside.desc"></span>
@@ -136,7 +148,7 @@
               </div>
               <input id="muted" type="checkbox" class="switch" />
             </label>
-            <label class="field toggle-field" for="mute-inactive">
+            <label class="field toggle-field" data-scope="global" for="mute-inactive">
               <div class="field-text">
                 <span class="field-label" data-i18n="field.muteInactive.label"></span>
                 <span class="field-desc" data-i18n="field.muteInactive.desc"></span>
@@ -240,6 +252,8 @@
     </div>
 
     <script src="../i18n/strings.js"></script>
+    <script src="../shared/account-settings.js"></script>
+    <script src="../shared/keys.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

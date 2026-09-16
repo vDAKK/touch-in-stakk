@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { pickPerAccount } = require('../shared/account-settings');
 
 const DEFAULT = { nextId: 1, accounts: [] };
 
@@ -52,6 +53,23 @@ function removeAccount(userDataDir, id) {
   return true;
 }
 
+// An account either follows the launcher's settings (custom: false, the
+// default) or owns the per-account ones. `patch` carries { custom?, settings? };
+// unknown keys are dropped so a renderer cannot widen what an account may own.
+function setAccountSettings(userDataDir, id, patch) {
+  const state = loadAccounts(userDataDir);
+  const account = state.accounts.find((a) => a.id === id);
+  if (!account) return null;
+  if (patch && patch.custom !== undefined) account.custom = !!patch.custom;
+  if (patch && patch.settings) {
+    account.settings = { ...(account.settings || {}), ...pickPerAccount(patch.settings) };
+  }
+  // An account back on the launcher's settings keeps no stale copy of its own.
+  if (!account.custom) delete account.settings;
+  saveAccounts(userDataDir, state);
+  return account;
+}
+
 function reorderAccounts(userDataDir, orderedIds) {
   const state = loadAccounts(userDataDir);
   const byId = new Map(state.accounts.map((a) => [a.id, a]));
@@ -72,4 +90,4 @@ function partitionFor(id) {
   return 'persist:acct-' + id;
 }
 
-module.exports = { loadAccounts, saveAccounts, addAccount, renameAccount, removeAccount, reorderAccounts, partitionFor, accountsPath, DEFAULT };
+module.exports = { loadAccounts, saveAccounts, addAccount, renameAccount, removeAccount, reorderAccounts, setAccountSettings, partitionFor, accountsPath, DEFAULT };

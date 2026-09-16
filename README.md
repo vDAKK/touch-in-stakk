@@ -70,6 +70,14 @@ passer à la version suivante.
   les autres.
 - **F2** : tous les comptes « prêt ».
 - Son global ou **uniquement sur l'onglet actif**.
+- **Pastille d'état sur chaque onglet** : à ce compte de jouer, en combat,
+  trajet en cours, récolte en cours, pas connecté. Un compte en arrière-plan se
+  lit sans l'ouvrir.
+- **Réglages propres à un compte** : par défaut chaque compte suit les réglages
+  du launcher ; dans les réglages, choisis un compte et coche « réglages propres
+  à ce compte » pour lui donner ses propres raccourcis, son son, ses options de
+  confort et son comportement en groupe (une mule et un perso principal n'ont
+  pas les mêmes besoins).
 
 ### Déplacement automatique
 - Sur la carte du monde, clic (ou clic droit) sur une zone → **« Courir ici »**
@@ -92,6 +100,11 @@ passer à la version suivante.
 - Suppression des confirmations de déplacement et de sort (un seul clic).
 - Raccourcis clavier configurables pour les fenêtres du jeu (inventaire, sorts,
   carte, quêtes, métiers…) et pour « afficher les entités ».
+- **Raccourcis indépendants du clavier** : les sorts et le changement d'onglet
+  (Ctrl+1…9) sont liés à la *position* des touches de la rangée de chiffres, pas
+  au caractère. Sur un AZERTY, la rangée tape `& é " ' ( - è _` : les sorts
+  partent sans Shift, et les réglages affichent le caractère de ton propre
+  clavier. Le pavé numérique déclenche le même sort.
 - Saisie au clavier physique dans les pavés numériques du jeu, Entrée pour
   confirmer les popups.
 - Étiquettes des ressources sur la map, masquage du bouton boutique.
@@ -115,9 +128,14 @@ eux). Un même compte garde le même appareil d'un lancement à l'autre.
 
 ## Réglages
 
-Bouton engrenage dans la barre. Langue, taille de la fenêtre (curseur, presets,
-adaptation à l'écran, aperçu en direct), son, multi-compte, confort, raccourcis.
-Sauvegardés dans `userData/settings.json`. Logs dans `userData/logs/app.log`.
+Bouton engrenage dans la barre. En haut du dialogue, **Régler** choisit ce que
+tu modifies : « Tous les comptes » (les réglages du launcher) ou un compte en
+particulier. Langue, taille de la fenêtre et barre d'onglets restent
+communes — le reste (son, confort, multi-compte, raccourcis) peut être propre à
+un compte. Les modifications de plusieurs comptes s'enregistrent en une fois.
+
+Sauvegardés dans `userData/settings.json`, les réglages propres à un compte dans
+`userData/accounts.json`. Logs dans `userData/logs/app.log`.
 
 ![Fenêtre de réglages : taille de fenêtre, son, confort de jeu, options multi-compte et raccourcis clavier](docs/settings.png)
 
@@ -157,6 +175,8 @@ suivi, la récolte, le trajet et les raccourcis.
 | `src/main/index.js` | Cycle de vie, fenêtre, proxy, IPC, mises à jour |
 | `src/main/proxy.js` | Proxy CDN + application des patchs |
 | `src/main/patcher.js` | Récupération et application des règles regex |
+| `src/main/http-cache.js` | Cache disque (ETag) des fichiers du jeu et du shell |
+| `vendor/lindo/` | Copie du commit lindo épinglé (GPL-3.0, hors builds) |
 | `src/main/spoof.js` | Profils d'appareil (UA, écran…) par compte |
 | `src/main/session-prep.js` | Préparation d'une session de compte |
 | `src/main/settings.js` / `accounts.js` | Persistance |
@@ -164,6 +184,37 @@ suivi, la récolte, le trajet et les raccourcis.
 | `src/preload/index.js` | Pont IPC `window.touch` |
 | `src/renderer/` | Interface du launcher (onglets, barre, réglages) |
 | `src/i18n/strings.js` | Dictionnaires FR/EN, partagés par le main, les preloads et le renderer |
+| `src/shared/account-settings.js` | Réglages hérités du launcher ou propres à un compte |
+
+Les fichiers chargés par le renderer en `<script>` (`src/i18n/strings.js`,
+`src/shared/account-settings.js`) partagent une seule portée globale : deux
+`const` de même nom au premier niveau et le second fichier ne s'exécute pas.
+`test/shared-scripts.test.js` les charge ensemble pour l'attraper.
+
+### Patchs communautaires
+
+Les patchs viennent de `zenoxs/lindo-game-base`, **épinglés à un commit**
+(`LINDO_COMMIT` dans `src/main/patcher.js`) : une branche mouvante ferait tourner
+dans le jeu le code que ce dépôt tiers contient aujourd'hui. Prendre une mise à
+jour = changer cette constante et re-télécharger `vendor/lindo/` depuis le
+nouveau commit.
+
+Le jeu de patchs est cherché dans cet ordre : le commit épinglé sur GitHub, puis
+le dernier jeu qui a marché (`userData/patchset.json`), puis la copie de
+`vendor/lindo/`. Le lancement n'échoue donc plus si GitHub est injoignable.
+
+`vendor/lindo/` est sous **GPL-3.0** (voir `vendor/lindo/README.md`), pas sous la
+licence MIT du projet : ces fichiers restent hors des installeurs
+(`build.files`). Dans une app packagée, le repli s'arrête donc au cache disque,
+qui couvre tous les lancements après le premier réussi.
+Les fichiers du CDN Ankama sont mis en cache dans `userData/proxy-cache` et
+revalidés par ETag — un lancement suivant ne re-télécharge pas les 5 Mo de
+`build/script.js`. (Le dossier ne peut pas s'appeler `cache` : sous Windows ce
+serait le cache disque de Chromium, que celui-ci vide au démarrage.)
+
+Le `buildVersion` annoncé au serveur est lu dans `build/script.js` au démarrage
+du proxy, pas déduit de la version de l'App Store (ce sont deux numéros
+différents).
 
 ## Traduire
 

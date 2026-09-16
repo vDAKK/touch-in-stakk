@@ -1,10 +1,24 @@
 const $ = (id) => document.getElementById(id);
 
+// The launcher's own console is not visible unless its devtools are open, so a
+// broken renderer looked like "nothing happens". Send failures to app.log.
+window.addEventListener('error', (e) => {
+  try {
+    window.touch.logDebug('[renderer-error]', { message: String(e.message), source: e.filename, line: e.lineno });
+  } catch (err) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    window.touch.logDebug('[renderer-rejection]', { reason: String((e.reason && e.reason.message) || e.reason) });
+  } catch (err) {}
+});
+
 // --- Language ----------------------------------------------------------------
 // Dictionaries come from ../i18n/strings.js, loaded by a <script> tag before
 // this file (the renderer has no bundler and no node integration, so it reads
 // the copy the file registers on globalThis).
 const I18N = globalThis.STAKK_I18N;
+const KEYS = globalThis.STAKK_KEYS;
 let lang = 'fr';
 // What the Automatic setting resolves to on this machine, from the OS locale.
 let autoLang = 'en';
@@ -66,14 +80,16 @@ const KEYBIND_ACTIONS = [
   { id: 'entities', key: 'action.entities', defaultKey: 'z' },
   { id: 'passTurn', key: 'action.passTurn', defaultKey: ' ' },
   { id: 'close', key: 'action.close', defaultKey: 'Escape' },
-  { id: 'spell1', key: 'action.spell', keyParams: { n: 1 }, defaultKey: '1' },
-  { id: 'spell2', key: 'action.spell', keyParams: { n: 2 }, defaultKey: '2' },
-  { id: 'spell3', key: 'action.spell', keyParams: { n: 3 }, defaultKey: '3' },
-  { id: 'spell4', key: 'action.spell', keyParams: { n: 4 }, defaultKey: '4' },
-  { id: 'spell5', key: 'action.spell', keyParams: { n: 5 }, defaultKey: '5' },
-  { id: 'spell6', key: 'action.spell', keyParams: { n: 6 }, defaultKey: '6' },
-  { id: 'spell7', key: 'action.spell', keyParams: { n: 7 }, defaultKey: '7' },
-  { id: 'spell8', key: 'action.spell', keyParams: { n: 8 }, defaultKey: '8' },
+  // Spells sit on the number row, whose characters change with the layout
+  // (AZERTY types & é " ' ( - è _ there), so they are bound to the position.
+  { id: 'spell1', key: 'action.spell', keyParams: { n: 1 }, defaultKey: 'code:Digit1' },
+  { id: 'spell2', key: 'action.spell', keyParams: { n: 2 }, defaultKey: 'code:Digit2' },
+  { id: 'spell3', key: 'action.spell', keyParams: { n: 3 }, defaultKey: 'code:Digit3' },
+  { id: 'spell4', key: 'action.spell', keyParams: { n: 4 }, defaultKey: 'code:Digit4' },
+  { id: 'spell5', key: 'action.spell', keyParams: { n: 5 }, defaultKey: 'code:Digit5' },
+  { id: 'spell6', key: 'action.spell', keyParams: { n: 6 }, defaultKey: 'code:Digit6' },
+  { id: 'spell7', key: 'action.spell', keyParams: { n: 7 }, defaultKey: 'code:Digit7' },
+  { id: 'spell8', key: 'action.spell', keyParams: { n: 8 }, defaultKey: 'code:Digit8' },
 ];
 
 // Drives the platform rules in style.css: macOS runs a native window, so its
@@ -210,8 +226,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'F2' && !e.ctrlKey) {
     e.preventDefault();
     handleHotkey({ name: 'ready-all' });
-  } else if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
-    const i = Number(e.key) - 1;
+  } else if (e.ctrlKey && KEYS.digitOfEvent(e) >= 1) {
+    const i = KEYS.digitOfEvent(e) - 1;
     if (accounts[i]) {
       e.preventDefault();
       handleHotkey({ name: 'switch', index: i });
@@ -291,11 +307,51 @@ window.touch.onUpdaterStatus((s) => {
 const viewId = (id) => 'view-' + id;
 const tabId = (id) => 'tab-' + id;
 
+const ACCT = globalThis.STAKK_ACCOUNT_SETTINGS;
+
+// The settings that apply to one account: the launcher's, unless that account
+// has been made custom in the settings dialog.
+function accountById(id) {
+  return accounts.find((a) => a.id === id) || null;
+}
+function eff(id) {
+  return ACCT.effectiveSettings(settings, accountById(id));
+}
+
+// What each account is doing, as reported by its hook: { online, inFight,
+// myTurn, busy }. Drives the tab badges.
+const accountStatus = {};
+
+// Only one badge shows at a time - the most urgent thing about that account.
+const TAB_STATE_GLYPH = { turn: '\u25C6', fight: '\u2694', travel: '\u27A4', harvest: '\u273F', offline: '\u25CB' };
+
+function tabState(accountId) {
+  const st = accountStatus[accountId];
+  if (!st || !st.online) return 'offline';
+  if (st.myTurn) return 'turn';
+  if (st.inFight) return 'fight';
+  if (st.busy === 'harvest') return 'harvest';
+  if (st.busy === 'travel') return 'travel';
+  return null;   // in game, nothing worth a badge
+}
+
+function paintTabState(accountId) {
+  const tab = document.getElementById(tabId(accountId));
+  const el = tab && tab.querySelector('.tab-state');
+  if (!el) return;
+  const state = tabState(accountId);
+  el.className = 'tab-state' + (state ? ' ' + state : '');
+  el.hidden = !state;
+  el.textContent = state ? TAB_STATE_GLYPH[state] : '';
+  el.title = state ? t('tab.state.' + state) : '';
+}
+
 // A stable colour per account so tabs are distinguishable at a glance.
 const TAB_COLORS = ['#2fd08a', '#e6b450', '#5b8def', '#e5737b', '#b98cf0', '#40c4d6', '#e08a4a', '#7fce5a'];
 const accountColor = (id) => TAB_COLORS[(id - 1) % TAB_COLORS.length];
 
 async function init() {
+  loadLayoutMap();
   await refreshPatchStatus();
   settings = await window.touch.getSettings();
   // Main owns the resolution (saved choice, else the OS locale); the first
@@ -349,10 +405,11 @@ async function createView(account) {
   wv.classList.add('inactive');
   wv.addEventListener('dom-ready', () => {
     applyMute();
-    wv.send('keybinds', computeKeyToAction());
-    wv.send('qol', { type: 'no-confirm', on: !!settings.noConfirm });
-    wv.send('qol', { type: 'resource-overlay', on: !!settings.showResources });
-    wv.send('qol', { type: 'hide-shop', on: !!settings.hideShop });
+    const e = eff(account.id);
+    wv.send('keybinds', computeKeyToAction(e.keybinds));
+    wv.send('qol', { type: 'no-confirm', on: !!e.noConfirm });
+    wv.send('qol', { type: 'resource-overlay', on: !!e.showResources });
+    wv.send('qol', { type: 'hide-shop', on: !!e.hideShop });
     wv.send('qol', { type: 'strings', strings: I18N.gameStrings(lang) });
   });
   wv.addEventListener('ipc-message', (e) => {
@@ -400,6 +457,10 @@ function renderTabs() {
       icon.style.background = accountColor(a.id);
     }
 
+    const state = document.createElement('span');
+    state.className = 'tab-state';
+    state.hidden = true;
+
     const label = document.createElement('span');
     label.className = 'tab-label';
     label.textContent = a.name;
@@ -414,8 +475,9 @@ function renderTabs() {
       removeTab(a);
     };
 
-    tab.append(icon, label, close);
+    tab.append(icon, state, label, close);
     box.appendChild(tab);
+    paintTabState(a.id);
   }
 }
 
@@ -425,7 +487,7 @@ function applyMute() {
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
     if (!wv || !wv.setAudioMuted) continue;
-    const off = !!settings.muted || (!!settings.muteInactive && a.id !== activeId);
+    const off = !!eff(a.id).muted || (!!settings.muteInactive && a.id !== activeId);
     try { wv.setAudioMuted(off); } catch {}
   }
 }
@@ -472,19 +534,28 @@ function handleQol(accountId, msg) {
     // Grouped: only the party leader's fight counts. Ungrouped: fall back to
     // the pinned/active tab.
     const isLeader = msg.inParty ? msg.isPartyLeader : accountId === effectiveLeader();
-    if (settings.joinLeaderFight && isLeader) {
+    if (isLeader) {
+      // Joining is the follower's own setting: a mule set to stay out stays out.
       for (const a of accounts) {
-        if (a.id !== accountId) sendToView(a.id, { type: 'join-fight', ...msg });
+        if (a.id !== accountId && eff(a.id).joinLeaderFight) sendToView(a.id, { type: 'join-fight', ...msg });
       }
     }
   } else if (msg.type === 'my-turn') {
-    if (settings.switchOnTurn && activeId !== accountId) setActive(accountId);
+    const e = eff(accountId);
+    if (e.switchOnTurn && activeId !== accountId) setActive(accountId);
     else if (activeId !== accountId) {
       setAlert(accountId, true);
-      if (settings.notifications) beep();
+      if (e.notifications) beep();
     }
     maybeAttention();
     pulseTab(accountId);
+  } else if (msg.type === 'status') {
+    accountStatus[accountId] = { online: !!msg.online, inFight: !!msg.inFight, myTurn: !!msg.myTurn, busy: msg.busy || null };
+    paintTabState(accountId);
+    // The toolbar's harvest button follows what the account reports, not our
+    // optimistic guess when the button was pressed.
+    if (msg.busy === 'harvest') harvesting.add(accountId); else harvesting.delete(accountId);
+    renderHarvestButton();
   } else if (msg.type === 'whisper') {
     notify(accountId, t('notify.whisper', { from: msg.from || '?' }));
   } else if (msg.type === 'party-invite') {
@@ -595,7 +666,7 @@ function renderHarvestButton() {
 function notify(accountId, text) {
   if (activeId !== accountId) setAlert(accountId, true);
   maybeAttention();
-  if (!settings.notifications) return;
+  if (!eff(accountId).notifications) return;
   beep();
   try {
     if (window.Notification) new Notification(accountName(accountId), { body: text, silent: true });
@@ -636,8 +707,13 @@ async function autoNameTab(accountId, charName) {
 function pushOwnAccounts() {
   const ids = Object.values(identities).map((i) => i.id).filter((v) => v != null);
   const names = Object.values(identities).map((i) => i.name).filter(Boolean);
-  const payload = { type: 'own-accounts', ids, names, autoAccept: !!(settings && settings.autoAcceptOwn), autoAcceptGroup: !!(settings && settings.autoAcceptGroup), joinLeaderFight: !!(settings && settings.joinLeaderFight) };
-  for (const a of accounts) sendToView(a.id, payload);
+  // autoAccept / autoAcceptGroup / joinLeaderFight are per account, so each
+  // view gets its own copy of the payload.
+  for (const a of accounts) {
+    const e = eff(a.id);
+    sendToView(a.id, { type: 'own-accounts', ids, names,
+      autoAccept: !!e.autoAcceptOwn, autoAcceptGroup: !!e.autoAcceptGroup, joinLeaderFight: !!e.joinLeaderFight });
+  }
 }
 
 function toggleStats() {
@@ -729,26 +805,31 @@ function handleBcastAction(sourceId, data) {
   }
 }
 
-function keybindKey(action) {
-  const binds = (settings && settings.keybinds) || {};
-  return binds[action.id] || action.defaultKey;
+function keybindKey(action, binds) {
+  const from = binds || (settings && settings.keybinds) || {};
+  const bound = from[action.id];
+  if (!bound) return action.defaultKey;
+  // A spell saved as the character '3' dates from before the number row was
+  // bound by position; read it as the position so it survives a layout change.
+  if (action.id.startsWith('spell') && /^[0-9]$/.test(bound)) return KEYS.codeBinding('Digit' + bound);
+  return bound;
 }
 
-// triggerKey -> actionId, pushed to each game preload.
-function computeKeyToAction() {
-  const map = {};
+// { keys, codes } -> actionId, pushed to each game preload. Accounts can carry
+// their own bindings, so the tables are built per account.
+function computeKeyToAction(binds) {
+  const bound = {};
   for (const a of KEYBIND_ACTIONS) {
-    const k = keybindKey(a);
-    if (k) map[k] = a.id;
+    const k = keybindKey(a, binds);
+    if (k) bound[a.id] = k;
   }
-  return map;
+  return KEYS.splitBindings(bound);
 }
 
 function pushKeybinds() {
-  const map = computeKeyToAction();
   for (const a of accounts) {
     const wv = document.getElementById(viewId(a.id));
-    if (wv) wv.send('keybinds', map);
+    if (wv) wv.send('keybinds', computeKeyToAction(eff(a.id).keybinds));
   }
 }
 
@@ -780,7 +861,28 @@ function actionLabel(a) {
   return t(a.key, a.keyParams);
 }
 
+// Physical bindings are shown as the character that position types here, read
+// from the OS layout — '1' on QWERTY, '&' on AZERTY — so the dialog matches the
+// keycaps the user is looking at.
+let layoutMap = null;
+function loadLayoutMap() {
+  try {
+    if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return;
+    navigator.keyboard.getLayoutMap().then((map) => {
+      layoutMap = map;
+      if (!$('settings-modal').hidden) renderKeybinds();
+    }, () => {});
+  } catch (e) {}
+}
+
 function keyLabel(k) {
+  const code = KEYS.codeOf(k);
+  if (code) {
+    const digit = KEYS.digitOfCode(code);
+    if (code.startsWith('Numpad')) return t('key.numpad', { n: digit });
+    const typed = layoutMap && layoutMap.get ? layoutMap.get(code) : null;
+    return (typed || String(digit)).toUpperCase();
+  }
   if (k === ' ') return t('key.space');
   if (k === 'Escape') return t('key.escape');
   return k.length === 1 ? k.toUpperCase() : k;
@@ -798,7 +900,7 @@ window.addEventListener(
     if (!capturingAction) return;
     e.preventDefault();
     e.stopPropagation();
-    if (e.key !== 'Escape') editingKeybinds[capturingAction] = e.key;
+    if (e.key !== 'Escape') editingKeybinds[capturingAction] = KEYS.bindingForEvent(e);
     capturingAction = null;
     renderKeybinds();
   },
@@ -910,8 +1012,125 @@ async function removeTab(a) {
   }
 }
 
+// --- Settings dialog scope --------------------------------------------------
+// The dialog edits either the launcher's settings ('global') or one account's.
+// Edits are kept per scope until Save, so switching scope loses nothing.
+let scope = 'global';
+let drafts = {};
+
+const PER_ACCOUNT_FIELDS = [
+  ['muted', 'muted'],
+  ['notifications', 'notifications'],
+  ['switch-on-turn', 'switchOnTurn'],
+  ['auto-accept-own', 'autoAcceptOwn'],
+  ['auto-accept-group', 'autoAcceptGroup'],
+  ['join-leader-fight', 'joinLeaderFight'],
+  ['no-confirm', 'noConfirm'],
+  ['show-resources', 'showResources'],
+  ['hide-shop', 'hideShop'],
+];
+
+function readPerAccountForm() {
+  const out = {};
+  for (const [id, key] of PER_ACCOUNT_FIELDS) out[key] = $(id).checked;
+  out.keybinds = { ...editingKeybinds };
+  return out;
+}
+
+function fillPerAccountForm(values) {
+  for (const [id, key] of PER_ACCOUNT_FIELDS) $(id).checked = !!values[key];
+  editingKeybinds = { ...(values.keybinds || {}) };
+  capturingAction = null;
+  renderKeybinds();
+}
+
+// Per-account controls are read-only while the account follows the launcher.
+function setPerAccountEnabled(on) {
+  for (const [id] of PER_ACCOUNT_FIELDS) $(id).disabled = !on;
+  $('keybinds').classList.toggle('disabled', !on);
+}
+
+function captureScope() {
+  if (scope === 'global') {
+    drafts.global = {
+      ...drafts.global,
+      ...readPerAccountForm(),
+      lang: $('lang').value === 'auto' ? null : $('lang').value,
+      resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
+      resolutionSet: true,
+      tabBarSide: $('tabbar-side').checked,
+      muteInactive: $('mute-inactive').checked,
+    };
+    return;
+  }
+  const draft = drafts[scope] || (drafts[scope] = { custom: false, settings: {} });
+  draft.custom = $('scope-custom').checked;
+  if (draft.custom) draft.settings = readPerAccountForm();
+}
+
+function loadScope() {
+  const isGlobal = scope === 'global';
+  for (const el of document.querySelectorAll('[data-scope="global"]')) el.hidden = !isGlobal;
+  $('scope-custom-row').hidden = isGlobal;
+
+  if (isGlobal) {
+    const g = drafts.global;
+    $('lang').value = g.lang || 'auto';
+    $('tabbar-side').checked = !!g.tabBarSide;
+    $('mute-inactive').checked = !!g.muteInactive;
+    fillPerAccountForm(g);
+    setPerAccountEnabled(true);
+    $('scope-hint').textContent = '';
+    return;
+  }
+  const draft = drafts[scope] || (drafts[scope] = { custom: false, settings: {} });
+  $('scope-custom').checked = !!draft.custom;
+  fillPerAccountForm(draft.custom ? { ...drafts.global, ...draft.settings } : drafts.global);
+  setPerAccountEnabled(!!draft.custom);
+  $('scope-hint').textContent = draft.custom ? '' : t('settings.scope.inherited');
+}
+
+function renderScopeSelect() {
+  const sel = $('scope-select');
+  sel.innerHTML = '';
+  const global = document.createElement('option');
+  global.value = 'global';
+  global.textContent = t('settings.scope.global');
+  sel.appendChild(global);
+  for (const a of accounts) {
+    const opt = document.createElement('option');
+    opt.value = String(a.id);
+    opt.textContent = a.name;
+    sel.appendChild(opt);
+  }
+  sel.value = scope === 'global' ? 'global' : String(scope);
+}
+
+$('scope-select').onchange = () => {
+  captureScope();
+  const v = $('scope-select').value;
+  scope = v === 'global' ? 'global' : Number(v);
+  loadScope();
+};
+
+$('scope-custom').onchange = () => {
+  // Ticking the box starts from what the account has been running until now.
+  const draft = drafts[scope] || (drafts[scope] = { custom: false, settings: {} });
+  if ($('scope-custom').checked && !Object.keys(draft.settings || {}).length) {
+    draft.settings = ACCT.pickPerAccount(drafts.global);
+  }
+  captureScope();
+  loadScope();
+};
+
 async function openSettings() {
   const s = await window.touch.getSettings();
+  scope = 'global';
+  drafts = { global: { ...s } };
+  for (const a of accounts) {
+    drafts[a.id] = { custom: !!a.custom, settings: { ...(a.settings || {}) } };
+  }
+  renderScopeSelect();
   // Before the user picks a size the window is screen-sized, so show that
   // rather than the nominal saved default.
   sizeBeforePreview = { width: window.outerWidth, height: window.outerHeight };
@@ -927,60 +1146,41 @@ async function openSettings() {
   $('res-w').oninput = () => setResolution(Number($('res-w').value), 0, 'width');
   $('res-h').oninput = () => setResolution(0, Number($('res-h').value), 'height');
   $('res-slider').oninput = () => setResolution(Number($('res-slider').value), 0, 'slider');
-  $('lang').value = s.lang || 'auto';
   // Live like the size preview: pick a language and the dialog is already in it.
   $('lang').onchange = () => setLang($('lang').value === 'auto' ? autoLang : $('lang').value);
-  $('tabbar-side').checked = !!s.tabBarSide;
-  $('muted').checked = s.muted;
-  $('mute-inactive').checked = !!s.muteInactive;
-  $('switch-on-turn').checked = s.switchOnTurn;
-  $('notifications').checked = s.notifications;
-  $('no-confirm').checked = s.noConfirm;
-  $('auto-accept-group').checked = s.autoAcceptGroup;
-  $('join-leader-fight').checked = !!s.joinLeaderFight;
-  $('hide-shop').checked = s.hideShop;
-  $('show-resources').checked = s.showResources;
-  $('auto-accept-own').checked = s.autoAcceptOwn;
-  editingKeybinds = { ...(s.keybinds || {}) };
-  capturingAction = null;
-  renderKeybinds();
+  loadScope();
   $('settings-modal').hidden = false;
 }
 
-async function saveSettings() {
-  const muted = $('muted').checked;
-  settings = await window.touch.setSettings({
-    // null means "follow the OS", which is also what the dialog shows as Auto.
-    lang: $('lang').value === 'auto' ? null : $('lang').value,
-    resolution: { width: Number($('res-w').value), height: Number($('res-h').value) },
-    // The user has now chosen a size, so later launches use it instead of
-    // filling the screen.
-    resolutionSet: true,
-    tabBarSide: $('tabbar-side').checked,
-    muted,
-    muteInactive: $('mute-inactive').checked,
-    switchOnTurn: $('switch-on-turn').checked,
-    notifications: $('notifications').checked,
-    noConfirm: $('no-confirm').checked,
-    showResources: $('show-resources').checked,
-    autoAcceptOwn: $('auto-accept-own').checked,
-    autoAcceptGroup: $('auto-accept-group').checked,
-    joinLeaderFight: $('join-leader-fight').checked,
-    hideShop: $('hide-shop').checked,
-    keybinds: editingKeybinds,
-  });
+// Comfort options are per account, so each view gets its own values.
+function pushComfort() {
   for (const a of accounts) {
-    const wv = document.getElementById(viewId(a.id));
-    // handled below by applyMute()
+    const e = eff(a.id);
+    sendToView(a.id, { type: 'no-confirm', on: !!e.noConfirm });
+    sendToView(a.id, { type: 'resource-overlay', on: !!e.showResources });
+    sendToView(a.id, { type: 'hide-shop', on: !!e.hideShop });
+  }
+}
+
+async function saveSettings() {
+  captureScope();
+  // null for the language means "follow the OS", which is what Auto shows.
+  settings = await window.touch.setSettings(drafts.global);
+  for (const a of accounts) {
+    const draft = drafts[a.id];
+    if (!draft) continue;
+    const saved = await window.touch.accountsSetSettings(a.id, draft);
+    if (saved) {
+      a.custom = !!saved.custom;
+      a.settings = saved.settings || {};
+    }
   }
   applyMute();
   setLang(settings.lang || autoLang);
   applyTabBarSide(settings.tabBarSide);
   pushKeybinds();
   pushOwnAccounts();
-  broadcastToAll({ type: 'no-confirm', on: !!settings.noConfirm });
-  broadcastToAll({ type: 'resource-overlay', on: !!settings.showResources });
-  broadcastToAll({ type: 'hide-shop', on: !!settings.hideShop });
+  pushComfort();
   $('settings-modal').hidden = true;
 }
 
@@ -997,3 +1197,5 @@ async function retryPatch() {
 }
 
 init();
+
+

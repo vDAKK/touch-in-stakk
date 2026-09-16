@@ -68,6 +68,12 @@ signed application — run the script above again to move to the next version.
   others.
 - **F2**: ready up every account.
 - Global sound, or **on the active tab only**.
+- **A state badge on every tab**: this account's turn, in a fight, travelling,
+  harvesting, not logged in. A background account can be read without opening it.
+- **Settings of its own for an account**: every account follows the launcher's
+  settings by default; in the settings dialog, pick an account and tick
+  "settings of its own" to give it its own shortcuts, sound, comfort options and
+  group behaviour (a mule and a main character do not want the same thing).
 
 ### Auto-travel
 - On the world map, click (or right-click) an area → **"Run here"** in the
@@ -91,6 +97,11 @@ signed application — run the script above again to move to the next version.
 - No more move and spell confirmations (a single click).
 - Configurable keyboard shortcuts for the game's own windows (inventory, spells,
   map, quests, professions…) and for "show entities".
+- **Layout-independent shortcuts**: spells and tab switching (Ctrl+1…9) are
+  bound to the *position* of the number-row keys, not to the character. On an
+  AZERTY keyboard that row types `& é " ' ( - è _`, so spells fire without
+  Shift, and the settings dialog shows the character of your own keyboard. The
+  numpad triggers the same spell.
 - Physical keyboard input in the game's number pads, Enter to confirm popups.
 - Resource labels on the map, shop button hidden.
 - Notifications (combat turn, private message, invitation, disconnection) on
@@ -113,9 +124,14 @@ another). An account keeps the same device from one launch to the next.
 
 ## Settings
 
-Gear button in the toolbar. Language, window size (slider, presets, fit to
-screen, live preview), sound, multi-account, comfort, shortcuts. Saved in
-`userData/settings.json`. Logs in `userData/logs/app.log`.
+Gear button in the toolbar. At the top of the dialog, **Editing** picks what you
+are changing: "Every account" (the launcher's settings) or one account in
+particular. Language, window size and tab bar side stay launcher-wide — the rest
+(sound, comfort, multi-account, shortcuts) can be owned by an account. Changes
+to several accounts are saved in one go.
+
+Saved in `userData/settings.json`, an account's own settings in
+`userData/accounts.json`. Logs in `userData/logs/app.log`.
 
 ![Settings dialog: window size, sound, playing comfort, multi-account options and keyboard shortcuts](docs/settings.png)
 
@@ -155,6 +171,8 @@ features take.
 | `src/main/index.js` | Lifecycle, window, proxy, IPC, updates |
 | `src/main/proxy.js` | CDN proxy + patch application |
 | `src/main/patcher.js` | Fetching and applying the regex rules |
+| `src/main/http-cache.js` | ETag disk cache for the game and shell files |
+| `vendor/lindo/` | Copy of the pinned lindo commit (GPL-3.0, not shipped) |
 | `src/main/spoof.js` | Per-account device profiles (UA, screen…) |
 | `src/main/session-prep.js` | Preparing an account session |
 | `src/main/settings.js` / `accounts.js` | Persistence |
@@ -162,6 +180,37 @@ features take.
 | `src/preload/index.js` | `window.touch` IPC bridge |
 | `src/renderer/` | Launcher interface (tabs, toolbar, settings) |
 | `src/i18n/strings.js` | FR/EN dictionaries, shared by main, the preloads and the renderer |
+| `src/shared/account-settings.js` | Settings inherited from the launcher, or owned by an account |
+
+The files the renderer loads as `<script>` (`src/i18n/strings.js`,
+`src/shared/account-settings.js`) share one global scope: two top-level `const`
+of the same name and the second file never runs.
+`test/shared-scripts.test.js` loads them together to catch that.
+
+### Community patches
+
+The patches come from `zenoxs/lindo-game-base`, **pinned to a commit**
+(`LINDO_COMMIT` in `src/main/patcher.js`): a moving branch would run whatever
+that third-party repository happens to contain today inside the game. Taking an
+update means bumping that constant and re-downloading `vendor/lindo/` from the
+new commit.
+
+The patch set is looked up in this order: the pinned commit on GitHub, then the
+last set that worked (`userData/patchset.json`), then the copy in
+`vendor/lindo/`. An unreachable GitHub no longer breaks the launch.
+
+`vendor/lindo/` is **GPL-3.0** (see `vendor/lindo/README.md`), not under this
+project's MIT licence, so those files stay out of the installers
+(`build.files`). In a packaged app the fallback chain therefore stops at the
+disk cache, which covers every launch after the first successful one. Ankama CDN
+files are cached in `userData/proxy-cache` and revalidated with their ETag, so a
+later launch does not re-download the 5 MB of `build/script.js`. (The directory
+cannot be named `cache`: on Windows that is Chromium's own disk cache, which it
+wipes at startup.)
+
+The `buildVersion` announced to the server is read out of `build/script.js` when
+the proxy starts, not derived from the App Store version — they are two
+different numbers.
 
 ## Translating
 

@@ -53,7 +53,11 @@ const FR = {
 
   // --- Settings: window ------------------------------------------------------
   'settings.title': 'Réglages',
-  'settings.sub': "Les changements s'appliquent à tous les comptes",
+  'settings.sub': "Réglages du launcher, ou d'un compte en particulier",
+  'settings.scope.label': 'Régler',
+  'settings.scope.global': 'Tous les comptes',
+  'settings.scope.custom': 'Réglages propres à ce compte',
+  'settings.scope.inherited': 'Ce compte suit les réglages de tous les comptes.',
   'settings.window': 'Fenêtre',
   'field.lang.label': 'Langue',
   'field.lang.desc': "Interface du launcher et messages affichés dans le jeu",
@@ -109,6 +113,7 @@ const FR = {
   'sc.ready': 'Tous les comptes « prêt »',
   'sc.fullscreen': 'Plein écran',
   'key.space': 'Espace',
+  'key.numpad': 'Pavé num. {n}',
   'key.escape': 'Échap',
 
   // --- Settings: advanced / actions -----------------------------------------
@@ -161,6 +166,13 @@ const FR = {
   'notify.interrupted': '{what} interrompu (action manuelle)',
   'notify.harvestStopped': 'Récolte arrêtée ({n})',
   'notify.disconnected': 'Déconnecté du jeu',
+
+  // --- Pastilles d'état sur les onglets --------------------------------------
+  'tab.state.turn': "C'est à ce compte de jouer",
+  'tab.state.fight': 'En combat',
+  'tab.state.travel': 'Trajet en cours',
+  'tab.state.harvest': 'Récolte en cours',
+  'tab.state.offline': 'Pas connecté au jeu',
   'group.notInGame': "Grouper : ce compte n'est pas encore en jeu",
   'group.noOthers': 'Grouper : aucun autre compte en jeu',
 
@@ -223,7 +235,11 @@ const EN = {
 
   // --- Settings: window ------------------------------------------------------
   'settings.title': 'Settings',
-  'settings.sub': 'Changes apply to every account',
+  'settings.sub': "Launcher settings, or one account's",
+  'settings.scope.label': 'Editing',
+  'settings.scope.global': 'Every account',
+  'settings.scope.custom': 'Settings of its own for this account',
+  'settings.scope.inherited': 'This account follows the every-account settings.',
   'settings.window': 'Window',
   'field.lang.label': 'Language',
   'field.lang.desc': 'Launcher interface and the messages shown inside the game',
@@ -279,6 +295,7 @@ const EN = {
   'sc.ready': 'Ready up every account',
   'sc.fullscreen': 'Full screen',
   'key.space': 'Space',
+  'key.numpad': 'Numpad {n}',
   'key.escape': 'Esc',
 
   // --- Settings: advanced / actions -----------------------------------------
@@ -331,6 +348,13 @@ const EN = {
   'notify.interrupted': '{what} stopped (manual action)',
   'notify.harvestStopped': 'Harvest stopped ({n})',
   'notify.disconnected': 'Disconnected from the game',
+
+  // --- Tab state badges ------------------------------------------------------
+  'tab.state.turn': "This account's turn to play",
+  'tab.state.fight': 'In a fight',
+  'tab.state.travel': 'Travelling',
+  'tab.state.harvest': 'Harvesting',
+  'tab.state.offline': 'Not logged in',
   'group.notInGame': 'Party up: this account is not in game yet',
   'group.noOthers': 'Party up: no other account in game',
 
