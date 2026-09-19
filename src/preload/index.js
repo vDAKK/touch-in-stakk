@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('touch', {
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
   getGameUrl: () => ipcRenderer.invoke('game:url'),
   getGamePreloadUrl: () => ipcRenderer.invoke('game:preload-path'),
+  getAndroidStatus: () => ipcRenderer.invoke('android:status'),
+  launchAndroidClient: () => ipcRenderer.invoke('android:launch'),
   getPatchStatus: () => ipcRenderer.invoke('patch:status'),
   // 'remote' | 'cache' | 'vendor' | 'none' — where the running patch set came from.
   getPatchSource: () => ipcRenderer.invoke('patch:source'),

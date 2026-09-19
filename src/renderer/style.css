@@ -59,6 +59,7 @@ button { font-family: inherit; }
 }
 .brand-name { font-size: 12.5px; letter-spacing: 0.3px; color: var(--text-dim); }
 .brand-name b { color: var(--text); font-weight: 700; letter-spacing: 0.6px; }
+.support-links { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 
 /* Custom window controls for the frameless platforms. macOS has a native title
    bar above this one, so they would be a duplicate there. */
@@ -83,7 +84,7 @@ html[data-platform="darwin"] .win-controls { display: none; }
   height: 100%;
   display: grid;
   place-items: center;
-  margin-left: auto;
+  margin-left: 0;
   background: transparent;
   color: var(--text-dim);
   border: 0;
@@ -464,7 +465,7 @@ body.side-tabs #stats-panel { top: calc(var(--titlebar-h) + 8px); }
 .panel-close { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 12px; }
 .panel-close:hover { color: var(--text); }
 
-#settings-modal {
+#settings-modal, #changelog-modal {
   position: fixed; inset: 0;
   background: rgba(6, 9, 12, 0.62);
   backdrop-filter: blur(3px);
@@ -512,6 +513,14 @@ body.side-tabs #stats-panel { top: calc(var(--titlebar-h) + 8px); }
   display: flex; gap: 10px; justify-content: flex-end;
   padding: 14px 24px; border-top: 1px solid var(--border);
 }
+.changelog-card { width: min(520px, 100vw - 48px); }
+.changelog-body { padding: 22px 24px; }
+.changelog-entry { display: flex; align-items: flex-start; gap: 14px; margin: 0; }
+.changelog-entry-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 auto; color: var(--accent); background: var(--accent-soft); border-radius: 10px; }
+.changelog-entry h3 { margin: 1px 0 5px; font-size: 14px; }
+.changelog-entry p { margin: 0; color: var(--text-dim); line-height: 1.5; }
+.changelog-actions { align-items: center; justify-content: space-between; }
+.changelog-dismiss { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 12px; cursor: pointer; }
 
 .settings-section { padding: 16px 0 6px; }
 .settings-section + .settings-section { border-top: 1px solid var(--border); }
@@ -549,6 +558,18 @@ body.side-tabs #stats-panel { top: calc(var(--titlebar-h) + 8px); }
   cursor: pointer;
 }
 .select-input:focus { outline: none; border-color: var(--accent); }
+.text-input {
+  flex: 0 1 230px;
+  min-width: 150px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  font: inherit;
+}
+.text-input:focus { outline: none; border-color: var(--accent); }
+.android-actions { align-items: center; }
 .res-inputs { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
 .res-inputs input {
   width: 74px;

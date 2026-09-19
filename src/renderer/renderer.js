@@ -100,10 +100,28 @@ $('min').onclick = () => window.touch.windowMinimize();
 $('max').onclick = () => window.touch.windowToggleMaximize();
 $('close').onclick = () => window.touch.windowClose();
 
-// Community link. Replace with your own invite; opened in the default browser
-// (main restricts app:open-external to https).
+// Support link, opened in the default browser (main restricts app:open-external
+// to https).
+const STAKK_KOFI_URL = 'https://ko-fi.com/touchinstakk';
+$('kofi').onclick = () => window.touch.openExternal(STAKK_KOFI_URL);
 const STAKK_DISCORD_URL = 'https://discord.gg/7R2tFcAkMy';
 $('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
+
+const CHANGELOG_STORAGE_KEY = 'stakk-changelog-dismissed-version';
+let appVersion = '';
+function openChangelog() {
+  $('changelog-version').textContent = appVersion || '—';
+  $('changelog-dismiss').checked = localStorage.getItem(CHANGELOG_STORAGE_KEY) === appVersion;
+  $('changelog-modal').hidden = false;
+}
+function closeChangelog() {
+  if ($('changelog-dismiss').checked && appVersion) localStorage.setItem(CHANGELOG_STORAGE_KEY, appVersion);
+  $('changelog-modal').hidden = true;
+}
+function showChangelogIfNeeded() {
+  if (appVersion && localStorage.getItem(CHANGELOG_STORAGE_KEY) !== appVersion) openChangelog();
+}
+$('changelog-close').onclick = closeChangelog;
 
 // Quick window-size presets, kept on the game's 1440/800 aspect ratio so the
 // view never letterboxes. Clicking one fills the width/height inputs; the user
@@ -354,6 +372,7 @@ async function init() {
   loadLayoutMap();
   await refreshPatchStatus();
   settings = await window.touch.getSettings();
+  appVersion = await window.touch.getAppVersion();
   // Main owns the resolution (saved choice, else the OS locale); the first
   // paint below is already in the right language.
   const langInfo = await window.touch.getLang();
@@ -368,6 +387,7 @@ async function init() {
   renderTabs();
   if (accounts.length) setActive(accounts[0].id);
   else showEmpty(true);
+  showChangelogIfNeeded();
 }
 
 function showEmpty(v) {
@@ -1060,6 +1080,11 @@ function captureScope() {
       resolutionSet: true,
       tabBarSide: $('tabbar-side').checked,
       muteInactive: $('mute-inactive').checked,
+      android: {
+        enabled: $('android-enabled').checked,
+        adbPath: $('android-adb').value.trim(),
+        address: $('android-address').value.trim(),
+      },
     };
     return;
   }
@@ -1075,9 +1100,13 @@ function loadScope() {
 
   if (isGlobal) {
     const g = drafts.global;
+    const android = g.android || {};
     $('lang').value = g.lang || 'auto';
     $('tabbar-side').checked = !!g.tabBarSide;
     $('mute-inactive').checked = !!g.muteInactive;
+    $('android-enabled').checked = !!android.enabled;
+    $('android-adb').value = android.adbPath || 'adb.exe';
+    $('android-address').value = android.address || '127.0.0.1:58526';
     fillPerAccountForm(g);
     setPerAccountEnabled(true);
     $('scope-hint').textContent = '';
@@ -1149,8 +1178,30 @@ async function openSettings() {
   // Live like the size preview: pick a language and the dialog is already in it.
   $('lang').onchange = () => setLang($('lang').value === 'auto' ? autoLang : $('lang').value);
   loadScope();
+  refreshAndroidStatus();
   $('settings-modal').hidden = false;
 }
+
+async function refreshAndroidStatus() {
+  const status = await window.touch.getAndroidStatus();
+  if (!status.installed) {
+    $('android-status').textContent = t('field.android.status.missing') + ': ' + (status.reason || '');
+  } else {
+    $('android-status').textContent = t('field.android.status.ready', { packageName: status.gamePackage || '—' });
+  }
+}
+
+$('android-launch').onclick = async () => {
+  try {
+    captureScope();
+    if (!drafts.global.android.enabled) throw new Error(t('field.android.disabled'));
+    settings = await window.touch.setSettings(drafts.global);
+    await window.touch.launchAndroidClient();
+    $('android-status').textContent = t('field.android.status.launched');
+  } catch (error) {
+    $('android-status').textContent = error.message || String(error);
+  }
+};
 
 // Comfort options are per account, so each view gets its own values.
 function pushComfort() {

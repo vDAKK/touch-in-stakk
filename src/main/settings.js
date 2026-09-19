@@ -6,7 +6,7 @@ const path = require('node:path');
 // nominal default below.
 // lang stays null until the user picks one; while it is null the interface
 // follows the system locale (French machine -> French, anything else English).
-const DEFAULT_SETTINGS = { lang: null, resolution: { width: 1440, height: 800 }, resolutionSet: false, muted: false, muteInactive: false, switchOnTurn: true, notifications: true, autoAcceptOwn: true, noConfirm: true, showResources: false, entitiesSelector: null, autoAcceptGroup: false, joinLeaderFight: false, hideShop: false, tabBarSide: false, keybinds: {} };
+const DEFAULT_SETTINGS = { lang: null, resolution: { width: 1440, height: 800 }, resolutionSet: false, muted: false, muteInactive: false, switchOnTurn: true, notifications: true, autoAcceptOwn: true, noConfirm: true, showResources: false, entitiesSelector: null, autoAcceptGroup: false, joinLeaderFight: false, hideShop: false, tabBarSide: false, keybinds: {}, android: { enabled: false, adbPath: 'adb.exe', address: '127.0.0.1:58526', packageName: '' } };
 
 function settingsPath(userDataDir) {
   return path.join(userDataDir, 'settings.json');
@@ -20,6 +20,7 @@ function loadSettings(userDataDir) {
       ...DEFAULT_SETTINGS,
       ...parsed,
       resolution: { ...DEFAULT_SETTINGS.resolution, ...(parsed.resolution || {}) },
+      android: { ...DEFAULT_SETTINGS.android, ...(parsed.android || {}) },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -32,6 +33,7 @@ function saveSettings(userDataDir, partial) {
     ...DEFAULT_SETTINGS,
     ...partial,
     resolution: { ...DEFAULT_SETTINGS.resolution, ...((partial && partial.resolution) || {}) },
+    android: { ...DEFAULT_SETTINGS.android, ...((partial && partial.android) || {}) },
   };
   fs.writeFileSync(settingsPath(userDataDir), JSON.stringify(merged, null, 2), 'utf-8');
   return merged;

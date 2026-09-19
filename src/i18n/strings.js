@@ -10,6 +10,8 @@
 
 const FR = {
   // --- Title bar -------------------------------------------------------------
+  'title.kofi': 'Soutenir STAKK sur Ko-fi',
+  'title.kofiAria': 'Ko-fi STAKK',
   'title.discord': 'Rejoindre le Discord STAKK',
   'title.discordAria': 'Discord STAKK',
   'win.minimize': 'Réduire',
@@ -24,6 +26,12 @@ const FR = {
   'update.available': 'Mise à jour {version} disponible — téléchargement…',
   'update.downloading': 'Téléchargement de la mise à jour… {percent}%',
   'update.ready': 'Mise à jour {version} prête.',
+  'changelog.title': 'Nouveautés',
+  'changelog.version': 'Version',
+  'changelog.kofi.title': 'Soutien du projet',
+  'changelog.kofi.desc': "Une icône Ko-fi a été ajoutée dans la barre de titre pour soutenir le projet.",
+  'changelog.dismiss': 'Ne plus afficher pour cette version',
+  'changelog.close': 'Fermer',
 
   // --- Toolbar ---------------------------------------------------------------
   'bar.addAccount': 'Ajouter un compte',
@@ -118,6 +126,27 @@ const FR = {
 
   // --- Settings: advanced / actions -----------------------------------------
   'settings.advanced': 'Avancé',
+  'settings.official': 'Client officiel Android / WSA',
+  'field.android.enabled.label': 'Utiliser le client officiel Android',
+  'field.android.enabled.desc': 'Lance Dofus Touch installé dans WSA via le pont Android officiel',
+  'field.wsl.command.label': 'Commande',
+  'field.wsl.command.desc': 'Chemin ou commande du client officiel dans WSL',
+  'field.wsl.args.label': 'Arguments',
+  'field.wsl.args.desc': 'Arguments séparés par des espaces, facultatifs',
+  'field.wsl.launch': 'Lancer',
+  'field.wsl.disabled': 'Active d’abord le client officiel WSL',
+  'field.wsl.status.windows': 'Disponible uniquement sous Windows',
+  'field.wsl.status.missing': 'WSL est indisponible ou aucune distribution n’est installée',
+  'field.wsl.status.ready': 'WSL disponible : {distros}',
+  'field.wsl.status.launched': 'Client officiel lancé',
+  'field.android.adb.label': 'ADB',
+  'field.android.adb.desc': 'Chemin vers adb.exe (laisse adb.exe si présent dans le PATH)',
+  'field.android.address.label': 'Adresse WSA',
+  'field.android.address.desc': 'Adresse de débogage Android de WSA, généralement 127.0.0.1:58526',
+  'field.android.disabled': 'Active d’abord le client Android',
+  'field.android.status.missing': 'WSA ou ADB indisponible',
+  'field.android.status.ready': 'Android disponible : {packageName}',
+  'field.android.status.launched': 'Dofus Touch lancé dans WSA',
   'field.devtools.label': 'Console du jeu',
   'field.devtools.desc': "DevTools de l'onglet actif, pour le diagnostic",
   'field.devtools.open': 'Ouvrir',
@@ -192,6 +221,8 @@ const FR = {
 
 const EN = {
   // --- Title bar -------------------------------------------------------------
+  'title.kofi': 'Support STAKK on Ko-fi',
+  'title.kofiAria': 'STAKK Ko-fi',
   'title.discord': 'Join the STAKK Discord',
   'title.discordAria': 'STAKK Discord',
   'win.minimize': 'Minimise',
@@ -206,6 +237,12 @@ const EN = {
   'update.available': 'Update {version} available — downloading…',
   'update.downloading': 'Downloading update… {percent}%',
   'update.ready': 'Update {version} ready.',
+  'changelog.title': "What's new",
+  'changelog.version': 'Version',
+  'changelog.kofi.title': 'Support the project',
+  'changelog.kofi.desc': 'A Ko-fi icon has been added to the title bar to support the project.',
+  'changelog.dismiss': 'Do not show again for this version',
+  'changelog.close': 'Close',
 
   // --- Toolbar ---------------------------------------------------------------
   'bar.addAccount': 'Add an account',
@@ -300,6 +337,27 @@ const EN = {
 
   // --- Settings: advanced / actions -----------------------------------------
   'settings.advanced': 'Advanced',
+  'settings.official': 'Official Android / WSA client',
+  'field.android.enabled.label': 'Use the official Android client',
+  'field.android.enabled.desc': 'Launches Dofus Touch installed in WSA through the official Android bridge',
+  'field.wsl.command.label': 'Command',
+  'field.wsl.command.desc': 'Path or command of the official client inside WSL',
+  'field.wsl.args.label': 'Arguments',
+  'field.wsl.args.desc': 'Optional arguments separated by spaces',
+  'field.wsl.launch': 'Launch',
+  'field.wsl.disabled': 'Enable the official WSL client first',
+  'field.wsl.status.windows': 'Available on Windows only',
+  'field.wsl.status.missing': 'WSL is unavailable or no distribution is installed',
+  'field.wsl.status.ready': 'WSL available: {distros}',
+  'field.wsl.status.launched': 'Official client launched',
+  'field.android.adb.label': 'ADB',
+  'field.android.adb.desc': 'Path to adb.exe (leave adb.exe if it is on PATH)',
+  'field.android.address.label': 'WSA address',
+  'field.android.address.desc': 'WSA Android debugging address, usually 127.0.0.1:58526',
+  'field.android.disabled': 'Enable the Android client first',
+  'field.android.status.missing': 'WSA or ADB unavailable',
+  'field.android.status.ready': 'Android available: {packageName}',
+  'field.android.status.launched': 'Dofus Touch launched in WSA',
   'field.devtools.label': 'Game console',
   'field.devtools.desc': 'DevTools of the active tab, for diagnostics',
   'field.devtools.open': 'Open',

@@ -23,6 +23,7 @@ const { deviceProfile } = require('./spoof');
 const { loadAccounts, addAccount, renameAccount, removeAccount, reorderAccounts, setAccountSettings } = require('./accounts');
 const { initAutoUpdate } = require('./updater');
 const { resolveLang } = require('../i18n/strings');
+const { discoverWsa, launchAndroidClient, DEFAULT_WSA_ADDRESS, DEFAULT_ADB_EXECUTABLE } = require('./android-launcher');
 
 let updater = null;
 
@@ -258,6 +259,19 @@ ipcMain.handle('settings:set', (_e, partial) => {
 ipcMain.handle('game:url', () => `http://127.0.0.1:${proxy.port}/game/index.html`);
 ipcMain.handle('game:preload-path', () => pathToFileURL(path.join(__dirname, '../preload/game.js')).href);
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('android:status', async () => {
+  const settings = loadSettings(userDataDir());
+  try {
+    return { installed: true, ...(await discoverWsa(settings.android, { userDataDir: userDataDir() })) };
+  } catch (error) {
+    return { installed: false, address: settings.android.address, reason: error.message };
+  }
+});
+ipcMain.handle('android:launch', () => {
+  const settings = loadSettings(userDataDir());
+  if (!settings.android.enabled) throw new Error('Le mode client Android est désactivé');
+  return launchAndroidClient(settings.android, { userDataDir: userDataDir() });
+});
 // Open a link in the user's default browser. Restricted to https so a
 // compromised renderer can't launch arbitrary schemes/executables.
 ipcMain.handle('app:open-external', (_e, url) => {

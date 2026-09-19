@@ -2,6 +2,8 @@
 
 **Français** · [English](README.en.md)
 
+[Soutenir le projet sur Ko-fi](https://ko-fi.com/touchinstakk)
+
 Launcher desktop pour **Dofus Touch** (macOS / Windows), pensé pour le multi-compte.
 Il charge le client officiel du jeu dans une fenêtre par compte, se présente aux
 serveurs comme une tablette Android, et ajoute par-dessus les outils qui manquent
@@ -44,6 +46,24 @@ curl -fsSL https://raw.githubusercontent.com/vDAKK/touch-in-stakk/master/install
 
 Sur Windows, SmartScreen demande une confirmation (« Informations complémentaires
 → Exécuter quand même »).
+
+### Mode client Android dans WSA (expérimental)
+
+La branche expérimentale peut piloter l’application Android officielle déjà
+installée dans Windows Subsystem for Android (WSA). STAKK utilise uniquement le
+pont ADB autorisé par WSA : il ne télécharge, ne modifie et ne redistribue pas
+les fichiers propriétaires du jeu.
+
+1. Installer WSA et Dofus Touch depuis une source autorisée.
+2. Activer le débogage développeur dans les réglages WSA.
+3. Ouvrir **Réglages → Client officiel Android / WSA** et conserver
+  `127.0.0.1:58526` si WSA utilise son port standard. STAKK télécharge les
+  Platform-Tools officiels dans son dossier utilisateur si ADB est absent.
+4. Activer l’option puis cliquer sur **Lancer**. STAKK découvre le package Dofus
+  automatiquement.
+
+Le mode est désactivé par défaut et ne modifie ni l’identité réseau ni les
+communications du client Android.
 
 ### Mises à jour
 
