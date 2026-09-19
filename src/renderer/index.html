@@ -285,6 +285,31 @@
       </div>
     </div>
 
+    <div id="donation-modal" hidden>
+      <div class="modal-card donation-card" role="dialog" aria-modal="true" aria-labelledby="donation-title">
+        <div class="modal-head">
+          <h2 id="donation-title" data-i18n="donation.title"></h2>
+          <span class="modal-sub" data-i18n="donation.sub"></span>
+        </div>
+        <div class="donation-body">
+          <div class="changelog-entry-icon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h12v5.5A4.5 4.5 0 0 1 11.5 18h-3A4.5 4.5 0 0 1 4 13.5V8Z"/><path d="M16 10h2a2.5 2.5 0 0 1 0 5h-2"/><path d="M8.5 11.5c0-1.2 1.5-1.8 2.2-.7.7-1.1 2.2-.5 2.2.7 0 .9-1.1 1.7-2.2 2.5-1.1-.8-2.2-1.6-2.2-2.5Z"/></svg>
+          </div>
+          <p data-i18n="donation.message"></p>
+        </div>
+        <div class="modal-actions donation-actions">
+          <label class="changelog-dismiss" for="donation-dismiss">
+            <input id="donation-dismiss" type="checkbox" class="switch" />
+            <span data-i18n="donation.dismiss"></span>
+          </label>
+          <div class="donation-buttons">
+            <button id="donation-close" class="btn-ghost" data-i18n="donation.close"></button>
+            <button id="donation-kofi" class="btn-primary" data-i18n="donation.support"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="changelog-modal" hidden>
       <div class="modal-card changelog-card" role="dialog" aria-modal="true" aria-labelledby="changelog-title">
         <div class="modal-head">

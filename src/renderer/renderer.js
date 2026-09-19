@@ -107,8 +107,18 @@ $('kofi').onclick = () => window.touch.openExternal(STAKK_KOFI_URL);
 const STAKK_DISCORD_URL = 'https://discord.gg/7R2tFcAkMy';
 $('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
 
+const DONATION_STORAGE_KEY = 'stakk-donation-dismissed';
 const CHANGELOG_STORAGE_KEY = 'stakk-changelog-dismissed-version';
 let appVersion = '';
+function closeDonation() {
+  if ($('donation-dismiss').checked) localStorage.setItem(DONATION_STORAGE_KEY, '1');
+  $('donation-modal').hidden = true;
+  showChangelogIfNeeded();
+}
+function showDonationIfNeeded() {
+  if (localStorage.getItem(DONATION_STORAGE_KEY) !== '1') $('donation-modal').hidden = false;
+  else showChangelogIfNeeded();
+}
 function openChangelog() {
   $('changelog-version').textContent = appVersion || '—';
   $('changelog-dismiss').checked = localStorage.getItem(CHANGELOG_STORAGE_KEY) === appVersion;
@@ -121,6 +131,8 @@ function closeChangelog() {
 function showChangelogIfNeeded() {
   if (appVersion && localStorage.getItem(CHANGELOG_STORAGE_KEY) !== appVersion) openChangelog();
 }
+$('donation-kofi').onclick = () => window.touch.openExternal(STAKK_KOFI_URL);
+$('donation-close').onclick = closeDonation;
 $('changelog-close').onclick = closeChangelog;
 
 // Quick window-size presets, kept on the game's 1440/800 aspect ratio so the
@@ -387,7 +399,7 @@ async function init() {
   renderTabs();
   if (accounts.length) setActive(accounts[0].id);
   else showEmpty(true);
-  showChangelogIfNeeded();
+  showDonationIfNeeded();
 }
 
 function showEmpty(v) {

@@ -465,7 +465,7 @@ body.side-tabs #stats-panel { top: calc(var(--titlebar-h) + 8px); }
 .panel-close { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 12px; }
 .panel-close:hover { color: var(--text); }
 
-#settings-modal, #changelog-modal {
+#settings-modal, #donation-modal, #changelog-modal {
   position: fixed; inset: 0;
   background: rgba(6, 9, 12, 0.62);
   backdrop-filter: blur(3px);
@@ -514,6 +514,11 @@ body.side-tabs #stats-panel { top: calc(var(--titlebar-h) + 8px); }
   padding: 14px 24px; border-top: 1px solid var(--border);
 }
 .changelog-card { width: min(520px, 100vw - 48px); }
+.donation-card { width: min(520px, 100vw - 48px); }
+.donation-body { display: flex; align-items: center; gap: 14px; padding: 22px 24px; }
+.donation-body p { margin: 0; color: var(--text-dim); line-height: 1.5; }
+.donation-actions { align-items: center; justify-content: space-between; }
+.donation-buttons { display: flex; gap: 10px; }
 .changelog-body { padding: 22px 24px; }
 .changelog-entry { display: flex; align-items: flex-start; gap: 14px; margin: 0; }
 .changelog-entry-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 auto; color: var(--accent); background: var(--accent-soft); border-radius: 10px; }
