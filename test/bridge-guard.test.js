@@ -25,6 +25,12 @@ function typesFrom(re) {
 const HOOK_EVENTS = listFrom('HOOK_EVENTS');
 const HOST_COMMANDS = listFrom('HOST_COMMANDS');
 
+const isOwnTurnMessage = new Function(
+  'characterId',
+  'msg',
+  GAME_JS.match(/function isOwnTurnMessage\([\s\S]*?\n  }/)[0] + '\nreturn isOwnTurnMessage(msg);'
+);
+
 // isAllowed is plain, dependency-free source — lift it out and exercise it.
 const isAllowed = new Function(
   'list',
@@ -43,6 +49,13 @@ test('isAllowed rejects anything that is not a typed object', () => {
   for (const bad of [null, undefined, 'my-turn', 42, [], {}, { type: 7 }]) {
     assert.ok(!isAllowed(HOOK_EVENTS, bad), 'should reject ' + JSON.stringify(bad));
   }
+});
+
+test('isOwnTurnMessage recognizes every account character id form', () => {
+  assert.strictEqual(isOwnTurnMessage(() => 42, { id: '42' }), true);
+  assert.strictEqual(isOwnTurnMessage(() => 42, { characterId: 42 }), true);
+  assert.strictEqual(isOwnTurnMessage(() => 42, { id: 7 }), false);
+  assert.strictEqual(isOwnTurnMessage(() => null, { id: 42 }), false);
 });
 
 test('every event the hook emits is on the allowlist', () => {

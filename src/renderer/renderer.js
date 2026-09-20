@@ -110,13 +110,16 @@ $('discord').onclick = () => window.touch.openExternal(STAKK_DISCORD_URL);
 const DONATION_STORAGE_KEY = 'stakk-donation-dismissed';
 const CHANGELOG_STORAGE_KEY = 'stakk-changelog-dismissed-version';
 let appVersion = '';
+function donationDismissed() {
+  return appVersion && localStorage.getItem(DONATION_STORAGE_KEY + '-' + appVersion) === '1';
+}
 function closeDonation() {
-  if ($('donation-dismiss').checked) localStorage.setItem(DONATION_STORAGE_KEY, '1');
+  if ($('donation-dismiss').checked && appVersion) localStorage.setItem(DONATION_STORAGE_KEY + '-' + appVersion, '1');
   $('donation-modal').hidden = true;
   showChangelogIfNeeded();
 }
 function showDonationIfNeeded() {
-  if (localStorage.getItem(DONATION_STORAGE_KEY) !== '1') $('donation-modal').hidden = false;
+  if (!donationDismissed()) $('donation-modal').hidden = false;
   else showChangelogIfNeeded();
 }
 function openChangelog() {

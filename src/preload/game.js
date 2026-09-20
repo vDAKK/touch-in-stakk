@@ -2179,6 +2179,11 @@ function gameHook(strings, token, commands) {
   var myTurn = false;
   var travelActive = false;
   var lastStatusKey = '';
+  function isOwnTurnMessage(msg) {
+    var ownId = characterId();
+    var turnId = msg && (msg.id != null ? msg.id : msg.characterId);
+    return ownId != null && turnId != null && String(turnId) === String(ownId);
+  }
 
   function emitStatus() {
     try {
@@ -2336,14 +2341,14 @@ function gameHook(strings, token, commands) {
     gui.on('GameFightTurnStartMessage', function (msg) {
       try {
         // Someone else's turn ends ours, which is what clears the tab badge.
-        myTurn = !!(msg && msg.id === gui.playerData.id);
+        myTurn = isOwnTurnMessage(msg);
         if (myTurn) emit({ type: 'my-turn' });
         emitStatus();
       } catch (e) {}
     });
     gui.on('GameFightTurnEndMessage', function (msg) {
       try {
-        if (msg && msg.id === gui.playerData.id) { myTurn = false; emitStatus(); }
+        if (isOwnTurnMessage(msg)) { myTurn = false; emitStatus(); }
       } catch (e) {}
     });
 

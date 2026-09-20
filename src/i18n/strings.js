@@ -36,6 +36,8 @@ const FR = {
   'changelog.version': 'Version',
   'changelog.kofi.title': 'Soutien du projet',
   'changelog.kofi.desc': "Une icône Ko-fi a été ajoutée dans la barre de titre pour soutenir le projet.",
+  'changelog.turn.title': 'Bascule multi-compte corrigée',
+  'changelog.turn.desc': "Le changement automatique d'onglet fonctionne maintenant aussi quand c'est au tour d'un compte secondaire.",
   'changelog.dismiss': 'Ne plus afficher pour cette version',
   'changelog.close': 'Fermer',
 
@@ -253,6 +255,8 @@ const EN = {
   'changelog.version': 'Version',
   'changelog.kofi.title': 'Support the project',
   'changelog.kofi.desc': 'A Ko-fi icon has been added to the title bar to support the project.',
+  'changelog.turn.title': 'Multi-account switching fixed',
+  'changelog.turn.desc': 'Automatic tab switching now also works when it is a secondary account\'s turn.',
   'changelog.dismiss': 'Do not show again for this version',
   'changelog.close': 'Close',
 
