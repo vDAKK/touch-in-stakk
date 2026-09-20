@@ -2,6 +2,8 @@
 
 [Français](README.md) · **English**
 
+[Support project on Ko-fi](https://ko-fi.com/touchinstakk)
+
 Desktop launcher for **Dofus Touch** (macOS / Windows), built for multi-account
 play. It loads the official game client in one window per account, presents
 itself to the servers as an Android tablet, and adds the tools PC players are
