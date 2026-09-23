@@ -1,4 +1,4 @@
-# TemporiX | Dofus Touch sur PC | Touch in STAKK [🟢]
+# Open Source | Dofus Touch sur PC | Touch in STAKK [🟢]
 
 **Français** · [English](README.en.md)
 
